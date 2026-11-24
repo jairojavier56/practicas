@@ -12,6 +12,74 @@ Simulador visual open-source tipo *Packet Tracer* para practicar **enrutamiento 
 
 ---
 
+## 0. Tres formas de usarlo
+
+| Modo | Qué es | Necesitas |
+|---|---|---|
+| **Lección en el navegador** | `leccion-interactiva.html`: un único fichero, Junos simulado, cero instalación | Solo un navegador |
+| **App en modo mock** | Canvas + consola + lecciones con el simulador | Node.js |
+| **App con Juniper real** (estilo PNETLab) | La misma app desplegando tus vJunos/cRPD/vMX/vSRX con Containerlab | Linux con KVM, o la **ISO** de abajo |
+
+Las lecciones con `lesson` en `lab.json` (por ejemplo `labs/02-leccion-bgp`) se ven en la pestaña **Lección**. Son los mismos pasos que la versión del navegador, pero sobre routers reales: **▶ Ejecutar** teclea los comandos en la consola del equipo, el backend consulta OSPF/BGP para el **estado en vivo**, y cada paso se marca solo cuando la red real llega al estado esperado.
+
+## Appliance: ISO para instalar en una máquina virtual
+
+`appliance/build-iso.sh` genera una ISO de **Ubuntu Server 24.04 con instalación desatendida**. Arrancas la VM con ella y, sin preguntas, queda instalado Ubuntu + Docker + Containerlab + vrnetlab + la app como servicio en `http://<IP-de-la-VM>:8080`.
+
+**1. Generar la ISO** (en cualquier Linux, o en WSL en Windows):
+
+```bash
+sudo apt install -y xorriso curl openssl
+```
+
+```bash
+git clone -b claude/practical-mendel-82nfq2 https://github.com/jairojavier56/practicas.git
+```
+
+```bash
+cd practicas/junos-isp-lab && ./appliance/build-iso.sh
+```
+
+- Descarga Ubuntu Server (~3 GB), verifica su SHA256 y te pide la contraseña del usuario `lab` (sirve para SSH, la consola y la web).
+- Con `--images /carpeta/con/tus/imagenes` mete tus imágenes Juniper en la ISO y se importan solas en el primer arranque. Es solo para uso propio: respeta las licencias de Juniper.
+- Opciones: `--iso ubuntu-24.04.x-live-server-amd64.iso` (si ya la tienes), `KEYBOARD=latam` (o `es`, `us`), `TIMEZONE=America/Bogota`.
+
+**2. Crear la VM**
+
+| | Solo cRPD | 4 × vJunos-router (lección incluida) |
+|---|---|---|
+| vCPU | 4 | 8 |
+| RAM | 8 GB | 24–32 GB |
+| Disco | 40 GB | 80 GB |
+
+**Virtualización anidada** (obligatoria para vJunos/vMX/vSRX/cJunosEvolved; cRPD no la necesita):
+- VMware Workstation/ESXi: *Virtualize Intel VT-x/EPT or AMD-V/RVI*.
+- VirtualBox: `VBoxManage modifyvm <vm> --nested-hw-virt on`.
+- Proxmox: tipo de CPU `host`.
+- Hyper-V: `Set-VMProcessor -VMName <vm> -ExposeVirtualizationExtensions $true`.
+
+Red de la VM: puente (bridge) o NAT con reenvío del puerto 8080.
+
+**3. Arrancar.** La entrada *Instalar Junos ISP Lab* se elige sola. **Borra el disco de la VM.** Reinicia y en el primer arranque instala Docker, Containerlab y la app (10–15 min, necesita internet). La consola de la VM muestra la URL.
+
+**4. Importar tus imágenes Juniper** (si no las metiste en la ISO):
+
+```bash
+scp vJunos-router-23.2R1.15.qcow2 lab@IP-DE-LA-VM:
+```
+
+```bash
+ssh lab@IP-DE-LA-VM sudo lab-import-image vJunos-router-23.2R1.15.qcow2
+```
+
+`lab-import-image` detecta el tipo por el nombre (cRPD/cJunosEvolved → `docker load`; vJunos/vMX/vSRX → vrnetlab `make`), registra el tag en `config/images.yaml`, pasa la app a `DRIVER=containerlab` y la reinicia. Si no reconoce el nombre: `--kind crpd|vjunos-router|vmx|vsrx|cjunosevolved`.
+
+Para preparar un Ubuntu 24.04 que **ya tengas instalado** (sin ISO), copia `junos-isp-lab` a `/opt/junos-isp-lab`, crea el usuario `lab` y ejecuta `sudo /opt/junos-isp-lab/appliance/firstboot.sh`.
+
+> La web pide usuario `lab` + tu contraseña (autenticación básica, `WEB_PASSWORD` en `.env`). Úsala en una red de laboratorio, no la expongas a internet.
+
+---
+
 ## 1. Arquitectura
 
 ```

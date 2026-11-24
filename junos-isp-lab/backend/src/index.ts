@@ -1,4 +1,5 @@
 import http from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import express, { type Request, type Response, type NextFunction } from "express";
@@ -76,6 +77,20 @@ if (protoPoll > 0) {
 
 // ------------------------------------------------------------ API REST
 const app = express();
+
+// Autenticación básica opcional (la activa la appliance/ISO con WEB_PASSWORD en .env).
+const WEB_USER = process.env.WEB_USER ?? "lab";
+const WEB_PASSWORD = process.env.WEB_PASSWORD ?? "";
+function authorized(header: string | undefined) {
+  if (!WEB_PASSWORD) return true;
+  const want = Buffer.from(`Basic ${Buffer.from(`${WEB_USER}:${WEB_PASSWORD}`).toString("base64")}`);
+  const got = Buffer.from(header ?? "");
+  return got.length === want.length && timingSafeEqual(got, want);
+}
+app.use((req, res, next) => {
+  if (authorized(req.headers.authorization)) return next();
+  res.set("WWW-Authenticate", 'Basic realm="Junos ISP Lab", charset="UTF-8"').status(401).send("Autenticación requerida");
+});
 app.use(express.json({ limit: "2mb" }));
 app.use(express.text({ limit: "2mb" }));
 
@@ -188,6 +203,7 @@ const wss = new WebSocketServer({ noServer: true });
 
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url ?? "/", "http://x");
+  if (!authorized(req.headers.authorization)) { socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n"); return socket.destroy(); }
   if (url.pathname !== "/ws/events" && url.pathname !== "/ws/console") return socket.destroy();
   wss.handleUpgrade(req, socket, head, (ws) => {
     if (url.pathname === "/ws/events") {

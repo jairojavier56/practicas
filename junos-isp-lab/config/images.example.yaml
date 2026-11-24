@@ -88,6 +88,27 @@ kinds:
     linkControl: true
     icon: router
 
+  # --- vSRX (firewall + routing). Útil en bordes con NAT/filtros.
+  vsrx:
+    label: "Juniper vSRX"
+    os: junos
+    clabKind: juniper_vsrx
+    image: "<<TU_IMAGEN_VSRX>>"            # ej: vrnetlab/juniper_vsrx:23.4R1
+    resources: { ramMB: 4096, vcpu: 2 }
+    bootTimeSec: 300
+    interfaces:
+      count: 8
+      junosPattern: "ge-0/0/{n}"
+      clabPattern: "eth{n+1}"              # VERIFICAR
+    console:
+      command: ["sshpass", "-e", "ssh", "-tt", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "${JUNOS_USER}@{container}"]
+      env: { SSHPASS: "$JUNOS_PASSWORD" }
+    exec:
+      command: ["sshpass", "-e", "ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "${JUNOS_USER}@{container}", "{cmd}"]
+      env: { SSHPASS: "$JUNOS_PASSWORD" }
+    linkControl: true
+    icon: router
+
   # --- cJunosEvolved (PTX/ACX virtual, interfaces et-0/0/x).
   cjunosevolved:
     label: "Juniper cJunosEvolved"
