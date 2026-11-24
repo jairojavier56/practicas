@@ -1,0 +1,922 @@
+<title>Lab BGP entre ISPs</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: lección a la izquierda; diagrama + consola a la derecha (se apila en móvil) */
+:root {
+  --bg: #f3f5f8; --panel: #ffffff; --ink: #18212c; --muted: #66727f; --line: #d9dfe6;
+  --accent: #1d5fd1; --isp-a: #2563c9; --isp-b: #c8661c;
+  --ok: #18845a; --bad: #c63b3b; --warn: #b07800;
+  --term-bg: #0d1218; --term-fg: #cfdbe6; --term-dim: #7d8b99; --term-prompt: #7fb7ff;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --panel: #161d26; --ink: #dbe3ec; --muted: #8b98a6; --line: #273240;
+    --accent: #5b9bff; --isp-a: #5b95f0; --isp-b: #e9924d; --ok: #3cc488; --bad: #ff7676; --warn: #e9b44a;
+    --term-bg: #0a0e13; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --panel: #161d26; --ink: #dbe3ec; --muted: #8b98a6; --line: #273240;
+  --accent: #5b9bff; --isp-a: #5b95f0; --isp-b: #e9924d; --ok: #3cc488; --bad: #ff7676; --warn: #e9b44a;
+  --term-bg: #0a0e13; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--font-ui); }
+code, kbd, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app {
+  height: 100%; display: grid; gap: 12px;
+  grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header.top { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+header.top h1 { font-size: 18px; margin: 0; font-weight: 600; text-wrap: balance; }
+header.top .sub { color: var(--muted); }
+.pill { font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.grow { flex: 1; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 4px 10px; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ---- Lección ---- */
+.lesson { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: auto; min-height: 0; display: flex; flex-direction: column; }
+.progress { padding: 12px 14px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+.progress-bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.progress-bar i { display: block; height: 100%; background: var(--ok); width: 0; transition: width .4s; }
+.steps { list-style: none; margin: 0; padding: 6px 0; }
+.step { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.step:last-child { border-bottom: 0; }
+.step-head { display: flex; gap: 10px; align-items: flex-start; width: 100%; background: none; border: 0; padding: 0; text-align: left; }
+.step-num { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--line); display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.step.current .step-num { border-color: var(--accent); color: var(--accent); }
+.step.done .step-num { background: var(--ok); border-color: var(--ok); color: #fff; }
+.step-title { font-weight: 600; padding-top: 1px; }
+.step.locked .step-title { color: var(--muted); }
+.step-body { margin: 8px 0 2px 34px; display: grid; gap: 8px; }
+.step:not(.open) .step-body { display: none; }
+.step-body p { margin: 0; }
+.cmd-block { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.cmd-block .cmd-top { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: color-mix(in srgb, var(--line) 45%, transparent); font-size: 12px; }
+.cmd-block .on { font-family: var(--font-mono); font-weight: 600; }
+.cmd-block pre { margin: 0; padding: 8px 10px; font: 12.5px/1.55 var(--font-mono); overflow-x: auto; white-space: pre; background: var(--panel); }
+.run { margin-left: auto; border: 0; background: var(--accent); color: #fff; border-radius: 5px; padding: 2px 10px; font-size: 12px; font-weight: 500; }
+.run:disabled { opacity: .5; cursor: default; }
+.observe { border-left: 3px solid var(--warn); padding: 4px 10px; background: color-mix(in srgb, var(--warn) 8%, transparent); border-radius: 0 6px 6px 0; }
+.observe b { color: var(--warn); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.result { border-left: 3px solid var(--ok); padding: 4px 10px; background: color-mix(in srgb, var(--ok) 9%, transparent); border-radius: 0 6px 6px 0; }
+.result b { color: var(--ok); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.waiting { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.waiting::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+
+/* ---- Lado derecho ---- */
+.work { display: grid; gap: 12px; grid-template-rows: auto minmax(0, 1fr); min-height: 0; min-width: 0; }
+.top-row { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 12px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0; padding: 10px 12px 0; font-weight: 600; }
+.diagram svg { width: 100%; height: auto; display: block; max-height: 330px; }
+.diagram .hint { font-size: 12px; color: var(--muted); padding: 0 12px 10px; }
+.router { cursor: pointer; }
+.router:hover rect.box { stroke-width: 3; }
+.link-hit { cursor: pointer; stroke: transparent; stroke-width: 18; fill: none; }
+.side-col { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+.status-list { padding: 8px 12px 12px; display: grid; gap: 4px; font-size: 12.5px; }
+.srow { display: flex; gap: 8px; align-items: center; }
+.srow .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
+.srow.ok .dot { background: var(--ok); } .srow.bad .dot { background: var(--bad); } .srow.warn .dot { background: var(--warn); }
+.srow .st { margin-left: auto; font-family: var(--font-mono); font-size: 12px; }
+.srow.ok .st { color: var(--ok); } .srow.bad .st { color: var(--bad); } .srow.warn .st { color: var(--warn); }
+.events { border-top: 1px solid var(--line); padding: 8px 12px; overflow: auto; font: 12px/1.5 var(--font-mono); min-height: 80px; max-height: 170px; }
+.events div { white-space: normal; overflow-wrap: anywhere; }
+.events .t { color: var(--muted); }
+.events .up { color: var(--ok); } .events .down { color: var(--bad); } .events .info { color: var(--accent); }
+
+/* ---- Consola ---- */
+.term { background: var(--term-bg); border-radius: 10px; display: flex; flex-direction: column; min-height: 260px; overflow: hidden; border: 1px solid var(--line); }
+.term-tabs { display: flex; gap: 2px; padding: 6px 6px 0; overflow-x: auto; }
+.term-tabs button { border: 0; background: transparent; color: var(--term-dim); font: 500 12.5px var(--font-mono); padding: 5px 12px; border-radius: 6px 6px 0 0; }
+.term-tabs button.active { background: #1a222c; color: var(--term-fg); }
+.term-tabs button .sw { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 6px; vertical-align: 1px; }
+.term-out { flex: 1; overflow: auto; padding: 10px 12px 4px; font: 13px/1.45 var(--font-mono); color: var(--term-fg); white-space: pre; background: #1a222c; min-height: 0; }
+.term-out .p { color: var(--term-prompt); }
+.term-out .e { color: #ff8f8f; }
+.term-out .ok { color: #7fe0a8; }
+.term-out .dim { color: var(--term-dim); }
+.term-in { display: flex; align-items: center; background: #1a222c; padding: 2px 12px 10px; font: 13px var(--font-mono); }
+.term-in label { color: var(--term-prompt); white-space: pre; }
+.term-in input { flex: 1; min-width: 0; background: transparent; border: 0; color: var(--term-fg); font: inherit; outline: none; caret-color: var(--term-fg); }
+.term-help { padding: 4px 12px 8px; background: #1a222c; color: var(--term-dim); font-size: 11.5px; border-top: 1px solid #26303b; }
+
+@media (max-width: 980px) {
+  html, body { height: auto; }
+  .app { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .lesson { max-height: none; }
+  .top-row { grid-template-columns: minmax(0, 1fr); }
+  .term { min-height: 380px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>Lab BGP entre ISPs</h1>
+    <span class="sub">Lección 1 · OSPF, iBGP y eBGP con primario y backup</span>
+    <span class="grow"></span>
+    <span class="pill">Junos simulado en el navegador</span>
+    <button class="btn" id="reset">Reiniciar lab</button>
+  </header>
+
+  <section class="lesson" aria-label="Lección">
+    <div class="progress">
+      <div style="display:flex;justify-content:space-between;font-size:12.5px"><span><b id="prog-n">0</b> de <span id="prog-t">0</span> pasos</span><span class="muted" style="color:var(--muted)">Ejecuta, observa, avanza</span></div>
+      <div class="progress-bar"><i id="prog-bar"></i></div>
+    </div>
+    <ol class="steps" id="steps"></ol>
+  </section>
+
+  <section class="work">
+    <div class="top-row">
+      <div class="card diagram">
+        <h2>Topología</h2>
+        <svg id="topo" viewBox="0 0 640 360" role="img" aria-label="Diagrama de la red: dos ISPs con cuatro routers"></svg>
+        <div class="hint">Clic en un router abre su consola · clic en un enlace lo corta o lo restaura</div>
+      </div>
+      <div class="card side-col">
+        <div>
+          <h2>Estado en vivo</h2>
+          <div class="status-list" id="status"></div>
+        </div>
+        <div class="events" id="events" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-tabs" id="tabs"></div>
+      <div class="term-out" id="out" tabindex="0"></div>
+      <form class="term-in" id="form" autocomplete="off">
+        <label for="cli" id="prompt"></label>
+        <input id="cli" spellcheck="false" autocapitalize="off" aria-label="Comando">
+      </form>
+      <div class="term-help">↑/↓ historial · prueba <code>show bgp summary</code>, <code>show route</code>, <code>show ospf neighbor</code>, <code>configure</code>, <code>?</code></div>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Motor de red simulado: interpreta comandos `set` de Junos (interfaces,
+   OSPF, BGP, estáticas, local-preference, as-path-prepend, next-hop self)
+   y calcula adyacencias, sesiones BGP y tablas de rutas.
+   ===================================================================== */
+const BGP_DELAY = 3000, OSPF_DELAY = 2000;
+const ip2n = s => s.split(".").reduce((a, o) => a * 256 + Number(o), 0);
+const n2ip = n => [24, 16, 8, 0].map(s => (n >>> s) & 255).join(".");
+const mask = len => len === 0 ? 0 : (0xffffffff << (32 - len)) >>> 0;
+const parseCidr = t => { const [a, l] = t.split("/"); return { ip: ip2n(a), len: Number(l ?? 32), text: t }; };
+const network = c => `${n2ip((c.ip & mask(c.len)) >>> 0)}/${c.len}`;
+const contains = (net, ip) => ((ip & mask(net.len)) >>> 0) === ((net.ip & mask(net.len)) >>> 0);
+const unitName = i => i.includes(".") ? i : `${i}.0`;
+const addrOf = c => c.text.split("/")[0];
+
+function parseSetConfig(id, lines) {
+  const c = { id, asn: undefined, ifaces: new Map(), ospf: new Map(), bgp: [], statics: [] };
+  const groups = new Map(), policies = new Map(), nbrs = [];
+  for (const raw of lines) {
+    const l = raw.trim(); let m;
+    if ((m = l.match(/^set interfaces (\S+) unit (\d+) family inet address (\S+)/))) c.ifaces.set(`${m[1]}.${m[2]}`, parseCidr(m[3]));
+    else if ((m = l.match(/^set routing-options autonomous-system (\d+)/))) c.asn = Number(m[1]);
+    else if ((m = l.match(/^set routing-options static route (\S+)/))) c.statics.push(m[1]);
+    else if ((m = l.match(/^set protocols ospf area \S+ interface (\S+)(.*)$/))) c.ospf.set(unitName(m[1]), /passive/.test(m[2]));
+    else if ((m = l.match(/^set policy-options policy-statement (\S+) (.*)$/))) policies.set(m[1], [...(policies.get(m[1]) ?? []), m[2]]);
+    else if ((m = l.match(/^set protocols bgp group (\S+) neighbor (\S+)\s*(.*)$/))) nbrs.push({ group: m[1], addr: m[2], rest: m[3] });
+    else if ((m = l.match(/^set protocols bgp group (\S+) (.*)$/))) {
+      const g = groups.get(m[1]) ?? { imp: [], exp: [] }; const r = m[2]; let k;
+      if ((k = r.match(/^type (internal|external)/))) g.type = k[1];
+      if ((k = r.match(/^peer-as (\d+)/))) g.peerAs = Number(k[1]);
+      if ((k = r.match(/^local-address (\S+)/))) g.localAddr = k[1];
+      if ((k = r.match(/^import (\S+)/))) g.imp.push(k[1]);
+      if ((k = r.match(/^export (\S+)/))) g.exp.push(k[1]);
+      groups.set(m[1], g);
+    }
+  }
+  const map = new Map();
+  for (const n of nbrs) {
+    const key = n.group + "|" + n.addr;
+    if (!map.has(key)) {
+      const g = groups.get(n.group) ?? { imp: [], exp: [] };
+      const imp = g.imp.flatMap(p => policies.get(p) ?? []), exp = g.exp.flatMap(p => policies.get(p) ?? []);
+      const lp = imp.map(x => x.match(/local-preference (\d+)/)).find(Boolean);
+      const pp = exp.map(x => x.match(/as-path-prepend "?([\d ]+)"?/)).find(Boolean);
+      map.set(key, {
+        addr: n.addr, group: n.group, type: g.type ?? "external", peerAs: g.peerAs, localAddr: g.localAddr,
+        nhs: exp.some(x => /next-hop self/.test(x)), localPref: lp ? Number(lp[1]) : undefined,
+        prepend: pp ? pp[1].trim().split(/\s+/).length : 0,
+      });
+    }
+    const k = n.rest.match(/^peer-as (\d+)/); if (k) map.get(key).peerAs = Number(k[1]);
+  }
+  c.bgp = [...map.values()];
+  return c;
+}
+
+const PREF = { Direct: 0, Local: 0, Static: 5, OSPF: 10, BGP: 170 };
+
+function simulate(topo, configs, down, now, timers) {
+  const cfg = new Map(topo.nodes.map(n => [n.id, parseSetConfig(n.id, configs.get(n.id) ?? [])]));
+  const rid = n => { const l = cfg.get(n)?.ifaces.get("lo0.0"); return l ? addrOf(l) : "0.0.0.0"; };
+  const live = new Set();
+
+  // L3 por enlace activo
+  const l3 = [];
+  for (const l of topo.links) {
+    if (down.has(l.id)) continue;
+    const ai = unitName(l.a.iface), bi = unitName(l.b.iface);
+    const A = cfg.get(l.a.node).ifaces.get(ai), B = cfg.get(l.b.node).ifaces.get(bi);
+    if (A && B && A.len === B.len && contains(A, B.ip)) l3.push({ a: l.a.node, b: l.b.node, ai, bi, aAddr: addrOf(A), bAddr: addrOf(B) });
+  }
+  // OSPF (con retardo de formación de adyacencia)
+  const ospf = [];
+  for (const x of l3) {
+    const ca = cfg.get(x.a), cb = cfg.get(x.b);
+    if (ca.ospf.has(x.ai) && cb.ospf.has(x.bi) && !ca.ospf.get(x.ai) && !cb.ospf.get(x.bi)) {
+      const key = `ospf|${x.a}|${x.ai}`; live.add(key);
+      if (!timers.has(key)) timers.set(key, now);
+      const state = now - timers.get(key) >= OSPF_DELAY ? "Full" : "ExStart";
+      ospf.push({ node: x.a, peerNode: x.b, iface: x.ai, peerAddr: x.bAddr, peerRid: rid(x.b), state });
+      ospf.push({ node: x.b, peerNode: x.a, iface: x.bi, peerAddr: x.aAddr, peerRid: rid(x.a), state });
+    }
+  }
+  // Rutas directas / locales / estáticas
+  const routes = new Map(topo.nodes.map(n => [n.id, []]));
+  const ifUp = (id, ifn) => ifn.startsWith("lo0") || topo.links.some(l => !down.has(l.id) && ((l.a.node === id && unitName(l.a.iface) === ifn) || (l.b.node === id && unitName(l.b.iface) === ifn)));
+  for (const [id, c] of cfg) {
+    const r = routes.get(id);
+    for (const [ifn, ci] of c.ifaces) {
+      if (!ifUp(id, ifn)) continue;
+      if (ci.len < 32) r.push({ prefix: network(ci), protocol: "Direct", via: ifn, pref: 0 });
+      r.push({ prefix: `${addrOf(ci)}/32`, protocol: "Local", via: ifn, pref: 0 });
+    }
+    for (const s of c.statics) r.push({ prefix: s, protocol: "Static", pref: 5, discard: true });
+  }
+  // OSPF SPF simplificado (BFS por saltos)
+  const full = ospf.filter(a => a.state === "Full");
+  for (const src of cfg.keys()) {
+    const first = new Map(), seen = new Set([src]), q = [src];
+    while (q.length) {
+      const cur = q.shift();
+      for (const a of full.filter(x => x.node === cur)) {
+        if (seen.has(a.peerNode)) continue;
+        seen.add(a.peerNode); first.set(a.peerNode, cur === src ? a : first.get(cur)); q.push(a.peerNode);
+      }
+    }
+    const r = routes.get(src);
+    for (const [dst, hop] of first) {
+      for (const [ifn, ci] of cfg.get(dst).ifaces) {
+        if (!cfg.get(dst).ospf.has(ifn)) continue;
+        const pfx = ifn.startsWith("lo0") ? `${addrOf(ci)}/32` : network(ci);
+        if (r.some(x => x.prefix === pfx && x.pref <= PREF.OSPF)) continue;
+        r.push({ prefix: pfx, protocol: "OSPF", nextHop: hop.peerAddr, via: hop.iface, pref: PREF.OSPF });
+      }
+    }
+  }
+  const reach = (node, ip) => routes.get(node).some(r => !r.discard && contains(parseCidr(r.prefix), ip2n(ip)));
+  const owner = ip => [...cfg.values()].find(c => [...c.ifaces.values()].some(x => addrOf(x) === ip));
+
+  // Sesiones BGP
+  const bgp = [], est = [];
+  for (const [id, c] of cfg) {
+    for (const nb of c.bgp) {
+      const peer = owner(nb.addr);
+      let ok = false, back;
+      if (peer && c.asn && peer.asn && reach(id, nb.addr)) {
+        back = peer.bgp.find(b => owner(b.addr)?.id === id);
+        const asOk = nb.type === "internal" ? peer.asn === c.asn && back?.type === "internal"
+          : nb.peerAs === peer.asn && back?.peerAs === c.asn;
+        ok = !!back && asOk && reach(peer.id, back.addr);
+      }
+      const key = `bgp|${id}|${nb.addr}`;
+      let state = "Active", up = 0;
+      if (ok) {
+        live.add(key);
+        if (!timers.has(key)) timers.set(key, now);
+        const el = now - timers.get(key);
+        state = el >= BGP_DELAY ? "Established" : el >= BGP_DELAY / 2 ? "OpenConfirm" : "Connect";
+        up = Math.max(0, el - BGP_DELAY);
+        if (state === "Established") est.push({ from: peer.id, to: id, nbr: back, back: nb });
+      }
+      bgp.push({ node: id, peer: nb.addr, peerAs: nb.type === "internal" ? c.asn : nb.peerAs, type: nb.type, state, up, received: 0, active: 0 });
+    }
+  }
+  for (const k of [...timers.keys()]) if (!live.has(k)) timers.delete(k);
+
+  // Propagación BGP: est = {from: emisor, to: receptor, nbr: emisor→receptor, back: receptor→emisor}
+  const rib = new Map([...cfg.keys()].map(id => [id, new Map()]));
+  const best = (node, pfx) => [...(rib.get(node).get(pfx) ?? [])].filter(x => !x.nextHop || reach(node, x.nextHop)).sort((x, y) =>
+    (y.localPref ?? 100) - (x.localPref ?? 100) || x.asPath.length - y.asPath.length || Number(!!x.ibgp) - Number(!!y.ibgp) || (x.peer ?? "").localeCompare(y.peer ?? ""))[0];
+  for (const [id, c] of cfg) for (const s of c.statics) rib.get(id).set(s, [{ prefix: s, protocol: "BGP", asPath: [], pref: 170, local: true }]);
+  for (let round = 0; round < 12; round++) {
+    let changed = false;
+    for (const e of est) {
+      const fromCfg = cfg.get(e.from), toCfg = cfg.get(e.to), ebgp = e.nbr.type === "external";
+      for (const pfx of rib.get(e.from).keys()) {
+        const b = best(e.from, pfx);
+        if (!b) continue;
+        if (!ebgp && b.ibgp) continue;                        // split-horizon iBGP
+        if (b.fromNode === e.to) continue;                     // no devolver al que lo envió
+        const path = ebgp ? [...Array(1 + (e.nbr.prepend ?? 0)).fill(fromCfg.asn), ...b.asPath] : b.asPath;
+        if (ebgp && path.includes(toCfg.asn)) continue;        // loop AS-PATH
+        const nh = ebgp || e.nbr.nhs || !b.nextHop ? e.nbr.localAddr ?? sessionSrc(e) : b.nextHop;
+        const cand = { prefix: pfx, protocol: "BGP", asPath: path, nextHop: nh, pref: 170, ibgp: !ebgp, peer: e.back.addr, fromNode: e.from,
+          localPref: ebgp ? e.back.localPref : (b.localPref ?? 100) };
+        const list = rib.get(e.to).get(pfx) ?? [];
+        const prev = list.find(x => x.peer === cand.peer);
+        if (prev && JSON.stringify(prev) === JSON.stringify(cand)) continue;
+        rib.get(e.to).set(pfx, [...list.filter(x => x.peer !== cand.peer), cand]);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  function sessionSrc(e) { return e.back.addr; }
+  for (const [id, m] of rib) {
+    for (const [pfx, cands] of m) {
+      const b = best(id, pfx);
+      for (const x of cands) {
+        if (x.local) continue;
+        routes.get(id).push({ ...x });
+        const s = bgp.find(s => s.node === id && s.peer === x.peer);
+        if (s) { s.received++; if (x === b) s.active++; }
+      }
+    }
+  }
+  // Selección de ruta activa + resolución del next-hop
+  for (const [id, r] of routes) {
+    const byPfx = new Map();
+    r.forEach(x => byPfx.set(x.prefix, [...(byPfx.get(x.prefix) ?? []), x]));
+    for (const list of byPfx.values()) {
+      list.forEach(x => x.active = false);
+      const ok = list.filter(x => x.protocol !== "BGP" || !x.nextHop || reach(id, x.nextHop));
+      ok.sort((a, b) => a.pref - b.pref || (b.localPref ?? 100) - (a.localPref ?? 100) || (a.asPath?.length ?? 0) - (b.asPath?.length ?? 0) || Number(!!a.ibgp) - Number(!!b.ibgp));
+      if (ok[0]) ok[0].active = true;
+    }
+    for (const x of r) {
+      if (x.protocol !== "BGP" || !x.nextHop) continue;
+      const res = r.filter(y => y.protocol !== "BGP" && y.via && contains(parseCidr(y.prefix), ip2n(x.nextHop)))
+        .sort((a, b) => parseCidr(b.prefix).len - parseCidr(a.prefix).len)[0];
+      x.via = res?.via;
+    }
+  }
+  return { routes, bgp, ospf, cfg };
+}
+
+/* =====================================================================
+   Laboratorio: topología y configuración inicial
+   ===================================================================== */
+const TOPO = {
+  nodes: [
+    { id: "a-pe1", isp: "A", x: 150, y: 80 },  { id: "a-pe2", isp: "A", x: 150, y: 290 },
+    { id: "b-pe2", isp: "B", x: 490, y: 80 },  { id: "b-pe1", isp: "B", x: 490, y: 290 },
+  ],
+  links: [
+    { id: "a-core", a: { node: "a-pe1", iface: "ge-0/0/0" }, b: { node: "a-pe2", iface: "ge-0/0/0" } },
+    { id: "b-core", a: { node: "b-pe1", iface: "ge-0/0/0" }, b: { node: "b-pe2", iface: "ge-0/0/0" } },
+    { id: "ebgp-prim", a: { node: "a-pe2", iface: "ge-0/0/1" }, b: { node: "b-pe1", iface: "ge-0/0/1" }, label: "primario" },
+    { id: "ebgp-backup", a: { node: "a-pe1", iface: "ge-0/0/1" }, b: { node: "b-pe2", iface: "ge-0/0/1" }, label: "backup" },
+  ],
+};
+const ISP = { A: { name: "ISP-A", asn: 65001, color: "var(--isp-a)" }, B: { name: "ISP-B", asn: 65002, color: "var(--isp-b)" } };
+
+function base(host, asn, core, ext, lo, cust, side) {
+  return [
+    `set system host-name ${host}`,
+    `set interfaces ge-0/0/0 unit 0 family inet address ${core}`,
+    `set interfaces ge-0/0/1 unit 0 family inet address ${ext}`,
+    `set interfaces lo0 unit 0 family inet address ${lo}/32`,
+    `set routing-options router-id ${lo}`,
+    `set routing-options autonomous-system ${asn}`,
+    `set routing-options static route ${cust} discard`,
+    `set policy-options prefix-list CLIENTES-${side} ${cust}`,
+    `set policy-options policy-statement EBGP-OUT term CLIENTES from prefix-list CLIENTES-${side}`,
+    `set policy-options policy-statement EBGP-OUT term CLIENTES then accept`,
+    `set policy-options policy-statement EBGP-OUT term RESTO then reject`,
+    `set policy-options policy-statement IBGP-OUT term STATIC from protocol static`,
+    `set policy-options policy-statement IBGP-OUT term STATIC then accept`,
+    `set policy-options policy-statement IBGP-OUT term NHS then next-hop self`,
+  ];
+}
+function ispB(lo, peerLo, ebgpPeer) {
+  return [
+    `set protocols ospf area 0.0.0.0 interface ge-0/0/0.0 interface-type p2p`,
+    `set protocols ospf area 0.0.0.0 interface lo0.0 passive`,
+    `set protocols bgp group IBGP type internal`,
+    `set protocols bgp group IBGP local-address ${lo}`,
+    `set protocols bgp group IBGP export IBGP-OUT`,
+    `set protocols bgp group IBGP neighbor ${peerLo}`,
+    `set protocols bgp group EBGP-A type external`,
+    `set protocols bgp group EBGP-A peer-as 65001`,
+    `set protocols bgp group EBGP-A export EBGP-OUT`,
+    `set protocols bgp group EBGP-A neighbor ${ebgpPeer}`,
+  ];
+}
+const INITIAL = () => new Map([
+  ["a-pe1", base("a-pe1", 65001, "10.0.12.1/30", "192.0.2.5/30", "10.0.0.1", "203.0.113.0/24", "A")],
+  ["a-pe2", base("a-pe2", 65001, "10.0.12.2/30", "192.0.2.1/30", "10.0.0.2", "203.0.113.0/24", "A")],
+  ["b-pe1", [...base("b-pe1", 65002, "10.1.12.1/30", "192.0.2.2/30", "10.1.0.1", "198.51.100.0/24", "B"), ...ispB("10.1.0.1", "10.1.0.2", "192.0.2.1")]],
+  ["b-pe2", [...base("b-pe2", 65002, "10.1.12.2/30", "192.0.2.6/30", "10.1.0.2", "198.51.100.0/24", "B"), ...ispB("10.1.0.2", "10.1.0.1", "192.0.2.5")]],
+]);
+
+/* =====================================================================
+   Estado global
+   ===================================================================== */
+let running, down, timers, st, ran, flags, cli, active;
+function resetLab() {
+  running = INITIAL(); down = new Set(); timers = new Map(); ran = new Set(); flags = {};
+  cli = Object.fromEntries(TOPO.nodes.map(n => [n.id, { mode: "op", cand: [], hist: [], hpos: 0, buf: [] }]));
+  for (const n of TOPO.nodes) print(n.id, `--- JUNOS 23.4R1 (simulado) · ${n.id} · ${ISP[n.isp].name} AS${ISP[n.isp].asn} ---\n`, "dim");
+  st = simulate(TOPO, running, down, Date.now(), timers);
+  prevSnap = snapshot(st);
+  document.getElementById("events").innerHTML = "";
+  logEvent("info", "Lab iniciado. ISP-B ya está configurado; tú configuras ISP-A.");
+}
+
+/* =====================================================================
+   CLI Junos simulado
+   ===================================================================== */
+const pad = (s, n) => String(s).padEnd(n);
+const fmtUp = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+
+function opCommand(node, full) {
+  const [cmdRaw, ...pipes] = full.split("|").map(s => s.trim());
+  const cmd = cmdRaw.replace(/\s+/g, " ").trim();
+  const match = pipes.map(p => p.match(/^match "?([^"]+)"?/)).find(Boolean)?.[1];
+  const withMatch = text => match ? text.split("\n").filter(l => new RegExp(match, "i").test(l)).join("\n") : text;
+  const sess = st.bgp.filter(s => s.node === node);
+  const routes = st.routes.get(node);
+  ran.add(node + "|" + cmd);
+
+  if (/^show (bgp summary|bgp sum)$/.test(cmd)) {
+    if (!sess.length) return "BGP is not running";
+    const downN = sess.filter(s => s.state !== "Established").length;
+    const out = [`Threading mode: BGP I/O`, `Groups: ${new Set(st.cfg.get(node).bgp.map(b => b.group)).size} Peers: ${sess.length} Down peers: ${downN}`,
+      `Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...`];
+    for (const s of sess) {
+      const pk = s.state === "Established" ? Math.floor(s.up / 3000) + 3 : 0;
+      out.push(`${pad(s.peer, 20)} ${String(s.peerAs ?? "").padStart(8)} ${String(pk).padStart(10)} ${String(pk).padStart(10)}       0       0 ${fmtUp(s.up).padStart(11)} ${s.state === "Established" ? "Establ" : s.state}`);
+      if (s.state === "Established") out.push(`  inet.0: ${s.active}/${s.received}/${s.received}/0`);
+    }
+    return withMatch(out.join("\n"));
+  }
+  if (/^show ospf neighbor$/.test(cmd)) {
+    const a = st.ospf.filter(x => x.node === node);
+    if (!st.cfg.get(node).ospf.size) return "OSPF instance is not running";
+    return withMatch(["Address          Interface              State           ID               Pri  Dead",
+      ...a.map(x => `${pad(x.peerAddr, 16)} ${pad(x.iface, 22)} ${pad(x.state, 15)} ${pad(x.peerRid, 16)} 128    36`)].join("\n"));
+  }
+  if (/^show ospf interface$/.test(cmd)) {
+    const c = st.cfg.get(node);
+    if (!c.ospf.size) return "OSPF instance is not running";
+    return ["Interface           State   Area            DR ID           BDR ID          Nbrs",
+      ...[...c.ospf].map(([i, passive]) => `${pad(i, 19)} ${pad(passive || i.startsWith("lo0") ? "DRother" : "PtToPt", 7)} 0.0.0.0         0.0.0.0         0.0.0.0            ${st.ospf.filter(x => x.node === node && x.iface === i && x.state === "Full").length}`)].join("\n");
+  }
+  if (/^show route/.test(cmd)) {
+    let rs = routes;
+    let m;
+    if ((m = cmd.match(/^show route (\d+\.\d+\.\d+\.\d+)(\/\d+)?/))) {
+      if (m[2]) rs = rs.filter(r => r.prefix === m[1] + m[2]);
+      else {
+        const cov = rs.filter(r => contains(parseCidr(r.prefix), ip2n(m[1])));
+        const L = Math.max(-1, ...cov.map(r => parseCidr(r.prefix).len));
+        rs = cov.filter(r => parseCidr(r.prefix).len === L);
+      }
+    }
+    if ((m = cmd.match(/protocol (\S+)/))) rs = rs.filter(r => r.protocol.toLowerCase() === m[1].toLowerCase());
+    if ((m = cmd.match(/receive-protocol bgp (\S+)/))) rs = routes.filter(r => r.protocol === "BGP" && r.peer === m[1]);
+    const detail = /\b(detail|extensive)\b/.test(cmd);
+    const sorted = [...rs].sort((a, b) => a.prefix.localeCompare(b.prefix, undefined, { numeric: true }) || Number(b.active) - Number(a.active));
+    const nAct = sorted.filter(r => r.active).length;
+    const out = [`\ninet.0: ${new Set(routes.map(r => r.prefix)).size} destinations, ${routes.length} routes (${routes.filter(r => r.active).length} active, 0 holddown, 0 hidden)`, `+ = Active Route, - = Last Active, * = Both\n`];
+    if (!sorted.length) return out.join("\n") + "\n(no hay rutas que coincidan)";
+    let last = "";
+    for (const r of sorted) {
+      const head = r.prefix === last ? " ".repeat(19) : pad(r.prefix, 19); last = r.prefix;
+      const lp = r.protocol === "BGP" ? `, localpref ${r.localPref ?? 100}` : "";
+      const fromPeer = r.protocol === "BGP" ? `, from ${r.peer}` : "";
+      out.push(`${head}${r.active ? "*" : " "}[${r.protocol}/${r.pref}] ${fmtUp(5000 + (r.protocol === "BGP" ? 0 : 60000))}${lp}${fromPeer}`);
+      if (r.asPath) out.push(`                      AS path: ${[...r.asPath, "I"].join(" ")}${detail ? `  ${r.ibgp ? "(iBGP)" : "(eBGP)"}` : ""}`);
+      if (r.nextHop) out.push(`                    >  to ${r.nextHop} via ${r.via ?? "?"}`);
+      else if (r.discard) out.push("                       Discard");
+      else if (r.via) out.push(`                    >  via ${r.via}`);
+    }
+    return withMatch(out.join("\n"));
+  }
+  if (/^show interfaces terse$/.test(cmd)) {
+    const c = st.cfg.get(node);
+    const ifs = ["ge-0/0/0", "ge-0/0/1", "lo0"];
+    const up = i => i === "lo0" || TOPO.links.some(l => !down.has(l.id) && [l.a, l.b].some(e => e.node === node && e.iface === i));
+    const rows = ["Interface               Admin Link Proto    Local                 Remote"];
+    for (const i of ifs) {
+      const s = up(i) ? "up" : "down";
+      rows.push(`${pad(i, 24)}up    ${s}`);
+      const a = c.ifaces.get(i + ".0");
+      if (a) rows.push(`${pad(i + ".0", 24)}up    ${pad(s, 5)}inet     ${a.text}`);
+    }
+    return withMatch(rows.join("\n"));
+  }
+  if (/^show configuration/.test(cmd)) {
+    const lines = running.get(node);
+    if (/protocols/.test(cmd)) return lines.filter(l => l.startsWith("set protocols")).join("\n") || "(no hay protocolos configurados)";
+    return withMatch(lines.join("\n"));
+  }
+  if (/^ping \S+/.test(cmd)) {
+    const target = cmd.split(" ")[1];
+    const r = routes.find(r => r.active && !r.discard && contains(parseCidr(r.prefix), ip2n(target)));
+    return r ? `PING ${target}: 56 data bytes\n64 bytes from ${target}: icmp_seq=0 ttl=64 time=1.21 ms\n64 bytes from ${target}: icmp_seq=1 ttl=64 time=0.98 ms\n\n--- ${target} ping statistics ---\n2 packets transmitted, 2 packets received, 0% packet loss`
+             : `PING ${target}: 56 data bytes\nping: sendto: No route to host\n\n--- ${target} ping statistics ---\n2 packets transmitted, 0 packets received, 100% packet loss`;
+  }
+  if (cmd === "?" || cmd === "help") return HELP;
+  if (cmd === "" ) return null;
+  return { err: `                ^\nunknown command.  Escribe ? para ver los comandos del simulador.` };
+}
+const HELP = `Comandos operacionales del simulador:
+  show interfaces terse          show route [prefijo|IP] [detail]
+  show ospf neighbor             show route protocol bgp|ospf
+  show ospf interface            show route receive-protocol bgp <IP>
+  show bgp summary               show configuration [protocols]
+  ping <IP>                      configure
+Modo configuración: set …  delete …  show | compare  commit  commit and-quit  rollback  exit  run <cmd>`;
+
+function promptOf(id) { return cli[id].mode === "conf" ? `root@${id}# ` : `root@${id}> `; }
+
+function execLine(node, line) {
+  const c = cli[node];
+  const cmd = line.trim();
+  print(node, (c.mode === "conf" ? "\n[edit]\n" : "") + promptOf(node), "p", cmd + "\n");
+  if (cmd) { c.hist.push(cmd); c.hpos = c.hist.length; }
+  if (c.mode === "op") {
+    if (/^configure( private| exclusive)?$/.test(cmd)) { c.mode = "conf"; c.cand = [...running.get(node)]; print(node, "Entering configuration mode\n"); return; }
+    if (cmd === "exit" || cmd === "quit") { print(node, "(en el simulador la sesión sigue abierta)\n", "dim"); return; }
+    const res = opCommand(node, cmd);
+    if (res && typeof res === "object") print(node, res.err + "\n", "e");
+    else if (res) print(node, res + "\n\n");
+    return;
+  }
+  // modo configuración
+  if (/^set /.test(cmd)) {
+    if (!/^set (interfaces|protocols|routing-options|policy-options|system) /.test(cmd)) return print(node, "syntax error.\n", "e");
+    if (!c.cand.includes(cmd)) c.cand.push(cmd);
+  } else if (/^delete /.test(cmd)) {
+    const p = "set " + cmd.slice(7);
+    const before = c.cand.length;
+    c.cand = c.cand.filter(l => !(l === p || l.startsWith(p + " ")));
+    if (c.cand.length === before) print(node, "warning: statement not found\n", "e");
+  } else if (cmd === "show | compare") {
+    const run = new Set(running.get(node)), cand = new Set(c.cand);
+    const diff = [...c.cand.filter(l => !run.has(l)).map(l => "+ " + l), ...[...run].filter(l => !cand.has(l)).map(l => "- " + l)];
+    print(node, (diff.join("\n") || "(sin cambios)") + "\n", "ok");
+  } else if (cmd === "show" || cmd === "show | display set") print(node, c.cand.join("\n") + "\n");
+  else if (/^commit( check| and-quit)?$/.test(cmd)) {
+    if (cmd === "commit check") return print(node, "configuration check succeeds\n", "ok");
+    running.set(node, [...c.cand]);
+    ran.add(node + "|commit");
+    print(node, "commit complete\n", "ok");
+    logEvent("info", `${node}: commit aplicado`);
+    tick();
+    if (cmd.endsWith("and-quit")) { c.mode = "op"; print(node, "Exiting configuration mode\n\n"); }
+  } else if (/^rollback( 0)?$/.test(cmd)) { c.cand = [...running.get(node)]; print(node, "load complete\n"); }
+  else if (/^run /.test(cmd)) { const r = opCommand(node, cmd.slice(4)); if (r) print(node, (r.err ?? r) + "\n", r.err ? "e" : ""); }
+  else if (cmd === "exit" || cmd === "quit" || cmd === "exit configuration-mode") {
+    if (c.cand.join("\n") !== running.get(node).join("\n")) print(node, "The configuration has been changed but not committed\nExit with uncommitted changes? [yes,no] (yes) yes\n", "e");
+    c.mode = "op"; c.cand = []; print(node, "Exiting configuration mode\n\n");
+  } else if (cmd === "?" ) print(node, HELP + "\n");
+  else if (cmd) print(node, "syntax error, expecting <command>.\n", "e");
+}
+
+/* =====================================================================
+   Terminal (render)
+   ===================================================================== */
+const outEl = document.getElementById("out");
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+function print(node, text, cls, plain) {
+  const b = cli[node].buf;
+  b.push({ text, cls, plain });
+  if (b.length > 1500) b.splice(0, b.length - 1500);
+  if (node === active) appendOut({ text, cls, plain });
+}
+function appendOut(e) {
+  const span = document.createElement("span");
+  if (e.cls) span.className = e.cls;
+  span.textContent = e.text;
+  outEl.appendChild(span);
+  if (e.plain) outEl.appendChild(document.createTextNode(e.plain));
+  outEl.scrollTop = outEl.scrollHeight;
+}
+function renderTerm() {
+  outEl.textContent = "";
+  for (const e of cli[active].buf) appendOut(e);
+  document.getElementById("prompt").textContent = promptOf(active);
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("active", b.dataset.id === active));
+}
+function selectNode(id, focus = true) { active = id; renderTerm(); renderTopo(); if (focus) document.getElementById("cli").focus({ preventScroll: true }); }
+
+const tabsEl = document.getElementById("tabs");
+for (const n of TOPO.nodes) {
+  const b = document.createElement("button");
+  b.dataset.id = n.id;
+  b.innerHTML = `<span class="sw" style="background:${ISP[n.isp].color}"></span>${n.id}`;
+  b.onclick = () => selectNode(n.id);
+  tabsEl.appendChild(b);
+}
+const input = document.getElementById("cli");
+document.getElementById("form").addEventListener("submit", e => {
+  e.preventDefault();
+  execLine(active, input.value); input.value = "";
+  document.getElementById("prompt").textContent = promptOf(active);
+  tick();
+});
+input.addEventListener("keydown", e => {
+  const c = cli[active];
+  if (e.key === "ArrowUp") { e.preventDefault(); c.hpos = Math.max(0, c.hpos - 1); input.value = c.hist[c.hpos] ?? ""; }
+  if (e.key === "ArrowDown") { e.preventDefault(); c.hpos = Math.min(c.hist.length, c.hpos + 1); input.value = c.hist[c.hpos] ?? ""; }
+});
+outEl.addEventListener("click", () => { if (!getSelection().toString()) input.focus({ preventScroll: true }); });
+
+/* =====================================================================
+   Diagrama
+   ===================================================================== */
+const svg = document.getElementById("topo");
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs, parent, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; parent.appendChild(e); return e; };
+const pos = id => TOPO.nodes.find(n => n.id === id);
+const sess = (node, peer) => st.bgp.find(s => s.node === node && s.peer === peer);
+const stateColor = s => s === "Established" || s === "Full" ? "var(--ok)" : s === "Active" || !s ? "var(--bad)" : "var(--warn)";
+
+function renderTopo() {
+  svg.textContent = "";
+  // zonas de cada ISP
+  for (const [k, x] of [["A", 40], ["B", 380]]) {
+    el("rect", { x, y: 18, width: 220, height: 330, rx: 14, fill: `color-mix(in srgb, ${ISP[k].color} 7%, transparent)`, stroke: `color-mix(in srgb, ${ISP[k].color} 35%, transparent)`, "stroke-dasharray": "4 4" }, svg);
+    el("text", { x: x + 12, y: 38, fill: ISP[k].color, "font-size": 12, "font-weight": 600, "font-family": "var(--font-ui)" }, svg, `${ISP[k].name} · AS${ISP[k].asn}`);
+  }
+  // iBGP (loopback a loopback) como arco punteado
+  for (const [a, b, peer] of [["a-pe1", "a-pe2", "10.0.0.2"], ["b-pe2", "b-pe1", "10.1.0.1"]]) {
+    const s = sess(a, peer); if (!s) continue;
+    const A = pos(a), B = pos(b), dx = A.isp === "A" ? 70 : -70;
+    el("path", { d: `M${A.x + dx * .35},${A.y + 28} C${A.x + dx},${A.y + 90} ${B.x + dx},${B.y - 90} ${B.x + dx * .35},${B.y - 28}`, fill: "none", stroke: stateColor(s.state), "stroke-width": 1.6, "stroke-dasharray": "2 4" }, svg);
+    el("text", { x: A.x + dx * 1.02, y: (A.y + B.y) / 2 + 4, "text-anchor": "middle", fill: stateColor(s.state), "font-size": 10.5, "font-family": "var(--font-mono)" }, svg, `iBGP ${s.state === "Established" ? "✓" : s.state}`);
+  }
+  // enlaces físicos
+  for (const l of TOPO.links) {
+    const A = pos(l.a.node), B = pos(l.b.node), isDown = down.has(l.id);
+    const g = el("g", { style: "cursor:pointer" }, svg);
+    g.addEventListener("pointerdown", e => { e.preventDefault(); toggleLink(l.id); });
+    el("line", { x1: A.x, y1: A.y, x2: B.x, y2: B.y, stroke: isDown ? "var(--bad)" : "var(--muted)", "stroke-width": 3, "stroke-dasharray": isDown ? "7 5" : "" }, g);
+    const hit = el("line", { x1: A.x, y1: A.y, x2: B.x, y2: B.y, class: "link-hit", tabindex: 0, role: "button", "aria-label": `${isDown ? "Restaurar" : "Cortar"} enlace ${l.id}` }, g);
+    el("title", {}, hit, `${l.id}: clic para ${isDown ? "restaurar" : "cortar"}`);
+    hit.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleLink(l.id); } });
+    // etiquetas de interfaz cerca de cada extremo
+    for (const [P, Q, iface] of [[A, B, l.a.iface], [B, A, l.b.iface]]) {
+      const t = P.x === Q.x ? 0.24 : 0.2, x = P.x + (Q.x - P.x) * t, y = P.y + (Q.y - P.y) * t;
+      const vertical = P.x === Q.x;
+      el("text", { x: vertical ? x + 8 : x, y: vertical ? y + 4 : y + 17, "text-anchor": vertical ? "start" : "middle", fill: "var(--muted)", "font-size": 10, "font-family": "var(--font-mono)" }, g, iface);
+    }
+    // estado del protocolo sobre el enlace
+    const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
+    let label, color;
+    if (l.id.endsWith("core")) {
+      const adj = st.ospf.find(x => x.node === l.a.node && x.iface === "ge-0/0/0.0");
+      label = isDown ? "DOWN" : adj ? `OSPF ${adj.state}` : "sin OSPF"; color = isDown ? "var(--bad)" : adj ? stateColor(adj.state) : "var(--muted)";
+    } else {
+      const peer = l.id === "ebgp-prim" ? "192.0.2.2" : "192.0.2.6";
+      const node = l.id === "ebgp-prim" ? "a-pe2" : "a-pe1";
+      const s = sess(node, peer);
+      label = isDown ? "DOWN" : s ? `eBGP ${s.state}` : "sin eBGP"; color = isDown ? "var(--bad)" : s ? stateColor(s.state) : "var(--muted)";
+      label = `${l.label} · ${label}`;
+    }
+    const w = label.length * 6.4 + 16;
+    const vertical = A.x === B.x;
+    const lx = vertical ? mx + (A.isp === "A" ? -w / 2 - 14 : w / 2 + 14) : mx, ly = vertical ? my : my;
+    el("rect", { x: lx - w / 2, y: ly - 10, width: w, height: 20, rx: 10, fill: "var(--panel)", stroke: color, "stroke-width": 1.2 }, g);
+    el("text", { x: lx, y: ly + 4, "text-anchor": "middle", fill: color, "font-size": 10.5, "font-weight": 600, "font-family": "var(--font-mono)" }, g, label);
+  }
+  // routers
+  for (const n of TOPO.nodes) {
+    const g = el("g", { class: "router", tabindex: 0, role: "button", "aria-label": `Abrir consola de ${n.id}` }, svg);
+    const sel = n.id === active;
+    el("rect", { class: "box", x: n.x - 52, y: n.y - 24, width: 104, height: 48, rx: 10, fill: "var(--panel)", stroke: ISP[n.isp].color, "stroke-width": sel ? 3.5 : 2 }, g);
+    el("text", { x: n.x, y: n.y - 3, "text-anchor": "middle", fill: "var(--ink)", "font-size": 13, "font-weight": 600, "font-family": "var(--font-mono)" }, g, n.id.toUpperCase());
+    const lo = st.cfg.get(n.id).ifaces.get("lo0.0");
+    el("text", { x: n.x, y: n.y + 13, "text-anchor": "middle", fill: "var(--muted)", "font-size": 10, "font-family": "var(--font-mono)" }, g, `lo0 ${lo ? addrOf(lo) : "-"}`);
+    g.addEventListener("pointerdown", e => { e.preventDefault(); selectNode(n.id); });
+    g.addEventListener("keydown", e => { if (e.key === "Enter") selectNode(n.id); });
+  }
+}
+function toggleLink(id) {
+  down.has(id) ? down.delete(id) : down.add(id);
+  logEvent(down.has(id) ? "down" : "up", `Enlace ${id} ${down.has(id) ? "CORTADO" : "restaurado"}`);
+  tick();
+}
+
+/* =====================================================================
+   Estado en vivo y eventos
+   ===================================================================== */
+let prevSnap = null;
+function snapshot(s) {
+  const m = new Map();
+  for (const b of s.bgp) m.set(`BGP ${b.node} → ${b.peer}`, b.state);
+  for (const a of s.ospf) m.set(`OSPF ${a.node} ↔ ${a.peerNode}`, a.state);
+  for (const n of ["a-pe1", "a-pe2"]) {
+    const r = s.routes.get(n).find(r => r.prefix === "198.51.100.0/24" && r.active);
+    m.set(`ruta ${n} 198.51.100.0/24`, r ? `via ${r.nextHop}` : "sin ruta");
+  }
+  return m;
+}
+function logEvent(kind, msg) {
+  const box = document.getElementById("events");
+  const d = document.createElement("div");
+  const t = new Date().toLocaleTimeString("es", { hour12: false });
+  d.innerHTML = `<span class="t">${t}</span> <span class="${kind}">${esc(msg)}</span>`;
+  box.appendChild(d); box.scrollTop = box.scrollHeight;
+}
+function renderStatus() {
+  const rows = [];
+  const add = (label, state, ok) => rows.push(`<div class="srow ${ok}"><span class="dot"></span><span>${esc(label)}</span><span class="st">${esc(state)}</span></div>`);
+  const cls = s => s === "Established" || s === "Full" ? "ok" : s === "Active" ? "bad" : "warn";
+  const o = st.ospf.find(a => a.node === "a-pe1");
+  add("OSPF A-PE1 ↔ A-PE2", o ? o.state : "no configurado", o ? cls(o.state) : "");
+  for (const [n, p, label] of [["a-pe1", "10.0.0.2", "iBGP A-PE1 ↔ A-PE2"], ["a-pe2", "192.0.2.2", "eBGP primario A-PE2 ↔ B-PE1"], ["a-pe1", "192.0.2.6", "eBGP backup A-PE1 ↔ B-PE2"]]) {
+    const s = sess(n, p);
+    add(label, s ? s.state : "no configurado", s ? cls(s.state) : "");
+  }
+  const r = st.routes.get("a-pe1").find(r => r.prefix === "198.51.100.0/24" && r.active);
+  add("A-PE1 → 198.51.100.0/24", r ? `via ${r.nextHop}` : "sin ruta", r ? "ok" : "bad");
+  document.getElementById("status").innerHTML = rows.join("");
+}
+function tick() {
+  st = simulate(TOPO, running, down, Date.now(), timers);
+  const snap = snapshot(st);
+  if (prevSnap) for (const [k, v] of snap) {
+    const old = prevSnap.get(k);
+    if (old === v) continue;
+    if (old === undefined && /Active|sin ruta/.test(v)) continue;
+    const kind = /Established|Full|^via/.test(v) ? "up" : /Active|sin ruta/.test(v) ? "down" : "info";
+    if (k.startsWith("BGP") && !/Established|Active/.test(v)) continue; // estados intermedios: no saturar
+    if (k.startsWith("OSPF") && v === "ExStart") continue;
+    logEvent(kind, `${k}: ${old ?? "—"} → ${v}`);
+  }
+  for (const [k, v] of prevSnap ?? []) if (!snap.has(k) && k.startsWith("OSPF")) logEvent("down", `${k}: ${v} → Down`);
+  prevSnap = snap;
+  renderTopo(); renderStatus(); checkSteps();
+}
+
+/* =====================================================================
+   Lección
+   ===================================================================== */
+const bestA1 = () => st.routes.get("a-pe1").find(r => r.prefix === "198.51.100.0/24" && r.active);
+const S = (n, p) => sess(n, p)?.state;
+const STEPS = [
+  {
+    title: "Explora tu router",
+    text: "Eres el ingeniero de ISP-A. Tus dos routers tienen IPs, pero ningún protocolo de enrutamiento. ISP-B ya está configurado y espera que le hables.",
+    cmds: [{ node: "a-pe1", lines: ["show interfaces terse", "show route", "show bgp summary"] }],
+    observe: "Las interfaces están up y solo hay rutas Direct, Local y una Static (tu prefijo de clientes). BGP ni siquiera está corriendo.",
+    done: () => ran.has("a-pe1|show interfaces terse") && ran.has("a-pe1|show route"),
+    result: "Sin IGP, A-PE1 no conoce la loopback de A-PE2 (10.0.0.2). Sin esa ruta no puede haber iBGP entre loopbacks.",
+  },
+  {
+    title: "Levanta OSPF dentro de ISP-A",
+    text: "OSPF da a cada router la ruta hacia las loopbacks de sus compañeros. Configúralo en los dos routers de ISP-A.",
+    cmds: [
+      { node: "a-pe1", lines: ["configure", "set protocols ospf area 0.0.0.0 interface ge-0/0/0.0 interface-type p2p", "set protocols ospf area 0.0.0.0 interface lo0.0 passive", "commit and-quit"] },
+      { node: "a-pe2", lines: ["configure", "set protocols ospf area 0.0.0.0 interface ge-0/0/0.0 interface-type p2p", "set protocols ospf area 0.0.0.0 interface lo0.0 passive", "commit and-quit"] },
+      { node: "a-pe1", lines: ["show ospf neighbor", "show route 10.0.0.2"] },
+    ],
+    observe: "Tras el segundo commit la adyacencia pasa por ExStart y llega a Full en unos segundos. Repite show ospf neighbor si aún no está Full.",
+    done: () => st.ospf.some(a => a.node === "a-pe1" && a.state === "Full") && st.routes.get("a-pe1").some(r => r.prefix === "10.0.0.2/32" && r.protocol === "OSPF"),
+    result: "10.0.0.2/32 aparece como [OSPF/10] vía ge-0/0/0.0. La loopback del vecino ya es alcanzable: requisito para el iBGP.",
+  },
+  {
+    title: "Sesión iBGP entre loopbacks",
+    text: "Dentro de un ISP los routers intercambian lo aprendido por iBGP. Se usa la loopback como origen para que la sesión sobreviva aunque caiga un enlace. La política IBGP-OUT ya existe y hace next-hop self.",
+    cmds: [
+      { node: "a-pe1", lines: ["configure", "set protocols bgp group IBGP type internal", "set protocols bgp group IBGP local-address 10.0.0.1", "set protocols bgp group IBGP export IBGP-OUT", "set protocols bgp group IBGP neighbor 10.0.0.2", "commit and-quit"] },
+      { node: "a-pe2", lines: ["configure", "set protocols bgp group IBGP type internal", "set protocols bgp group IBGP local-address 10.0.0.2", "set protocols bgp group IBGP export IBGP-OUT", "set protocols bgp group IBGP neighbor 10.0.0.1", "commit and-quit"] },
+      { node: "a-pe1", lines: ["show bgp summary"] },
+    ],
+    observe: "La sesión pasa por Connect y OpenConfirm antes de Established. Fíjate en el arco punteado del diagrama.",
+    done: () => S("a-pe1", "10.0.0.2") === "Established",
+    result: "iBGP Established. Por ahora solo se intercambian 203.0.113.0/24 (tu propio prefijo): todavía no hablas con ISP-B.",
+  },
+  {
+    title: "eBGP primario hacia ISP-B",
+    text: "B-PE1 ya tiene configurado a 192.0.2.1 (A-PE2) como vecino en el AS 65001. Te falta tu lado.",
+    cmds: [
+      { node: "a-pe2", lines: ["configure", "set protocols bgp group EBGP-B type external", "set protocols bgp group EBGP-B peer-as 65002", "set protocols bgp group EBGP-B export EBGP-OUT", "set protocols bgp group EBGP-B neighbor 192.0.2.2", "commit and-quit", "show bgp summary"] },
+      { node: "a-pe1", lines: ["show route 198.51.100.0/24"] },
+    ],
+    observe: "A-PE2 recibe 198.51.100.0/24 con AS path 65002 y lo reenvía por iBGP. En A-PE1 la ruta llega from 10.0.0.2 (next-hop self).",
+    done: () => S("a-pe2", "192.0.2.2") === "Established" && st.routes.get("a-pe1").some(r => r.prefix === "198.51.100.0/24" && r.peer === "10.0.0.2"),
+    result: "Todo ISP-A alcanza los clientes de ISP-B a través del enlace primario. A-PE1 la conoce solo por iBGP.",
+  },
+  {
+    title: "Añade el enlace de backup",
+    text: "Para tener redundancia, A-PE1 también hace eBGP con B-PE2. Antes de ejecutar, piensa: ¿por dónde saldrá A-PE1 hacia 198.51.100.0/24?",
+    cmds: [
+      { node: "a-pe1", lines: ["configure", "set protocols bgp group EBGP-B type external", "set protocols bgp group EBGP-B peer-as 65002", "set protocols bgp group EBGP-B export EBGP-OUT", "set protocols bgp group EBGP-B neighbor 192.0.2.6", "commit and-quit"] },
+      { node: "a-pe1", lines: ["show route 198.51.100.0/24"] },
+    ],
+    observe: "Ahora hay dos rutas. La activa (*) es la de 192.0.2.6: el backup. Ante igual local-pref y AS path, Junos prefiere eBGP sobre iBGP.",
+    done: () => S("a-pe1", "192.0.2.6") === "Established" && st.routes.get("a-pe1").some(r => r.prefix === "198.51.100.0/24" && r.peer === "192.0.2.6"),
+    result: "Problema real de ISP: el tráfico de A-PE1 sale por el enlace que querías de reserva. Lo arreglas en el siguiente paso.",
+  },
+  {
+    title: "Arregla la preferencia con Local-Preference",
+    text: "Baja la local-preference de lo que entra por el backup. Más alta gana, y el valor por defecto es 100.",
+    cmds: [
+      { node: "a-pe1", lines: ["configure", "set policy-options policy-statement BACKUP-IN then local-preference 50", "set protocols bgp group EBGP-B import BACKUP-IN", "show | compare", "commit and-quit", "show route 198.51.100.0/24"] },
+    ],
+    observe: "La ruta vía 192.0.2.6 sigue existiendo, ahora con localpref 50, pero la activa (*) vuelve a ser la de 10.0.0.2 (localpref 100).",
+    done: () => bestA1()?.nextHop === "10.0.0.2" && S("a-pe1", "192.0.2.6") === "Established",
+    result: "Local-Preference es el primer criterio de selección BGP en Junos tras la validez del next-hop. Controla por dónde SALE tu tráfico.",
+  },
+  {
+    title: "Simula una caída del primario",
+    text: "En el diagrama, haz clic en el enlace «primario» (abajo) para cortarlo. Observa el registro de eventos y la tabla de rutas. Después vuelve a hacer clic para restaurarlo.",
+    cmds: [{ node: "a-pe1", lines: ["show bgp summary", "show route 198.51.100.0/24"] }],
+    observe: "Al cortar, la sesión eBGP de A-PE2 cae a Active y A-PE1 pasa a usar el backup aunque tenga localpref 50, porque es la única ruta. Al restaurar, vuelve al primario.",
+    done: () => flags.failoverSeen && !down.has("ebgp-prim") && bestA1()?.nextHop === "10.0.0.2",
+    result: "Has visto la convergencia BGP: la redundancia funciona y la política devuelve el tráfico al primario cuando vuelve. Lección completada.",
+  },
+];
+
+let doneSet = new Set(), openIdx = 0, typing = false;
+function renderSteps() {
+  const ol = document.getElementById("steps"); ol.textContent = "";
+  const current = STEPS.findIndex((_, i) => !doneSet.has(i));
+  STEPS.forEach((s, i) => {
+    const li = document.createElement("li");
+    li.className = `step ${doneSet.has(i) ? "done" : ""} ${i === current ? "current" : ""} ${i > current && current !== -1 ? "locked" : ""} ${i === openIdx ? "open" : ""}`;
+    li.innerHTML = `<button class="step-head" aria-expanded="${i === openIdx}"><span class="step-num">${doneSet.has(i) ? "✓" : i + 1}</span><span class="step-title">${esc(s.title)}</span></button>
+      <div class="step-body"><p>${esc(s.text)}</p>
+      ${s.cmds.map((c, j) => `<div class="cmd-block"><div class="cmd-top">en <span class="on" style="color:${ISP[pos(c.node).isp].color}">${c.node}</span><button class="run" data-i="${i}" data-j="${j}" ${typing ? "disabled" : ""}>▶ Ejecutar</button></div><pre>${esc(c.lines.join("\n"))}</pre></div>`).join("")}
+      <div class="observe"><b>Observa</b><br>${esc(s.observe)}</div>
+      ${doneSet.has(i) ? `<div class="result"><b>Qué ha pasado</b><br>${esc(s.result)}</div>` : `<div class="waiting">Esperando a que la red llegue al estado esperado…</div>`}
+      </div>`;
+    li.querySelector(".step-head").onclick = () => { openIdx = openIdx === i ? -1 : i; renderSteps(); };
+    ol.appendChild(li);
+  });
+  ol.querySelectorAll(".run").forEach(b => b.onclick = () => runBlock(STEPS[b.dataset.i].cmds[b.dataset.j]));
+  document.getElementById("prog-n").textContent = doneSet.size;
+  document.getElementById("prog-t").textContent = STEPS.length;
+  document.getElementById("prog-bar").style.width = `${(doneSet.size / STEPS.length) * 100}%`;
+}
+async function runBlock(c) {
+  if (typing) return;
+  typing = true; renderSteps();
+  selectNode(c.node, false);
+  for (const line of c.lines) {
+    for (let k = 1; k <= line.length; k += 3) { input.value = line.slice(0, k); await sleep(8); }
+    input.value = "";
+    execLine(c.node, line);
+    document.getElementById("prompt").textContent = promptOf(c.node);
+    tick();
+    await sleep(260);
+  }
+  typing = false; renderSteps();
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function checkSteps() {
+  if (down.has("ebgp-prim") && bestA1()?.nextHop === "192.0.2.6") flags.failoverSeen = true;
+  let changed = false;
+  STEPS.forEach((s, i) => {
+    const prevDone = i === 0 || doneSet.has(i - 1);
+    if (!doneSet.has(i) && prevDone && s.done()) {
+      doneSet.add(i); changed = true;
+      logEvent("up", `Paso ${i + 1} completado: ${s.title}`);
+      if (openIdx === i) openIdx = i + 1 < STEPS.length ? i + 1 : i;
+    }
+  });
+  if (changed) renderSteps();
+}
+
+document.getElementById("reset").onclick = () => {
+  for (const n of TOPO.nodes) cli[n.id].buf = [];
+  resetLab(); doneSet = new Set(); openIdx = 0; renderSteps(); selectNode("a-pe1", false); tick();
+};
+
+// arranque
+resetLab();
+active = "a-pe1";
+renderSteps(); renderTerm(); tick();
+setInterval(tick, 1000);
+</script>
