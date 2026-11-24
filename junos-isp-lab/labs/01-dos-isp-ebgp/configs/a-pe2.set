@@ -1,0 +1,29 @@
+# ===== ISP-A / A-PE2 (AS65001) — enlace eBGP PRIMARIO hacia B-PE1 =====
+set system host-name a-pe2
+set interfaces ge-0/0/0 description "core -> a-pe1"
+set interfaces ge-0/0/0 unit 0 family inet address 10.0.12.2/30
+set interfaces ge-0/0/1 description "eBGP primario -> b-pe1 (AS65002)"
+set interfaces ge-0/0/1 unit 0 family inet address 192.0.2.1/30
+set interfaces lo0 unit 0 family inet address 10.0.0.2/32
+set routing-options router-id 10.0.0.2
+set routing-options autonomous-system 65001
+set routing-options static route 203.0.113.0/24 discard
+set protocols ospf area 0.0.0.0 interface ge-0/0/0.0 interface-type p2p
+set protocols ospf area 0.0.0.0 interface lo0.0 passive
+set policy-options prefix-list CLIENTES-A 203.0.113.0/24
+set policy-options policy-statement EBGP-OUT term CLIENTES from prefix-list CLIENTES-A
+set policy-options policy-statement EBGP-OUT term CLIENTES then community add ORIGEN-A
+set policy-options policy-statement EBGP-OUT term CLIENTES then accept
+set policy-options policy-statement EBGP-OUT term RESTO then reject
+set policy-options policy-statement IBGP-OUT term STATIC from protocol static
+set policy-options policy-statement IBGP-OUT term STATIC then accept
+set policy-options policy-statement IBGP-OUT term NHS then next-hop self
+set policy-options community ORIGEN-A members 65001:100
+set protocols bgp group IBGP type internal
+set protocols bgp group IBGP local-address 10.0.0.2
+set protocols bgp group IBGP export IBGP-OUT
+set protocols bgp group IBGP neighbor 10.0.0.1
+set protocols bgp group EBGP-B type external
+set protocols bgp group EBGP-B peer-as 65002
+set protocols bgp group EBGP-B export EBGP-OUT
+set protocols bgp group EBGP-B neighbor 192.0.2.2

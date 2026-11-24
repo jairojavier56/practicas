@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+config/images.yaml
+data/
+*.qcow2
+*.tgz
+*.tar

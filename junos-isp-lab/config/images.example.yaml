@@ -1,0 +1,133 @@
+# ---------------------------------------------------------------------------
+# Catálogo de equipos.  Copia este fichero a config/images.yaml (está en
+# .gitignore) y rellena los huecos <<...>> con TUS imágenes.
+#
+#   cp config/images.example.yaml config/images.yaml
+#
+# Cada "kind" describe:
+#   clabKind     -> kind de containerlab
+#   image        -> tag de imagen Docker YA CARGADA/CONSTRUIDA en el host
+#   resources    -> RAM/vCPU estimados (el backend los suma antes de desplegar)
+#   interfaces   -> cómo se llaman en Junos (lo que ve el alumno) y cómo
+#                   se llaman en el YAML de containerlab. {n} = 0,1,2...
+#   console/exec -> comando para abrir CLI interactivo / ejecutar un "show".
+#                   Placeholders: {container} {node} {lab} {cmd}
+#                   env "$VAR" se resuelve desde el entorno del backend (.env)
+#
+# Las líneas marcadas VERIFICAR dependen de tu versión de imagen/containerlab:
+# compruébalas con `containerlab deploy` + `show interfaces terse` la 1ª vez.
+# ---------------------------------------------------------------------------
+kinds:
+
+  # --- Ligero y muy fiel para control-plane: el RPD de Junos en un contenedor.
+  # Ideal para P/PE/RR de "relleno". El forwarding lo hace el kernel Linux.
+  crpd:
+    label: "Juniper cRPD"
+    os: junos
+    clabKind: juniper_crpd
+    # docker load -i junos-routing-crpd-docker-<ver>.tgz   →  docker images
+    image: "<<TU_IMAGEN_CRPD>>"            # ej: crpd:24.2R1.14
+    resources: { ramMB: 1024, vcpu: 1 }
+    bootTimeSec: 15
+    interfaces:
+      count: 8
+      junosPattern: "eth{n+1}"             # cRPD ve las interfaces Linux tal cual
+      clabPattern: "eth{n+1}"
+    # VERIFICAR: según versión, cRPD puede requerir fichero de licencia para BGP
+    # a escala. Si tienes uno, móntalo así (ruta en TU host):
+    # clabExtra:
+    #   license: "<<RUTA_A_TU_LICENCIA_CRPD>>"
+    console: { command: ["docker", "exec", "-it", "{container}", "cli"] }
+    exec:    { command: ["docker", "exec", "{container}", "cli", "-c", "{cmd}"] }
+    linkControl: true
+    icon: router
+
+  # --- Router Junos completo (VM dentro de contenedor vía vrnetlab). El más
+  # cercano a un MX real para el alumno: ge-0/0/x, lo0, policy, etc.
+  vjunos-router:
+    label: "Juniper vJunos-router"
+    os: junos
+    clabKind: juniper_vjunosrouter
+    # Se construye con vrnetlab a partir de tu .qcow2:
+    #   cp vJunos-router-<ver>.qcow2 vrnetlab/juniper/vjunos-router/ && make
+    image: "<<TU_IMAGEN_VJUNOS_ROUTER>>"   # ej: vrnetlab/juniper_vjunos-router:23.2R1.15
+    resources: { ramMB: 5120, vcpu: 4 }
+    bootTimeSec: 420
+    interfaces:
+      count: 10
+      junosPattern: "ge-0/0/{n}"
+      clabPattern: "eth{n+1}"              # VERIFICAR: eth1 → ge-0/0/0
+    console:
+      command: ["sshpass", "-e", "ssh", "-tt", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "${JUNOS_USER}@{container}"]
+      env: { SSHPASS: "$JUNOS_PASSWORD" }
+    exec:
+      command: ["sshpass", "-e", "ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "${JUNOS_USER}@{container}", "{cmd}"]
+      env: { SSHPASS: "$JUNOS_PASSWORD" }
+    linkControl: true
+    icon: router
+
+  # --- vMX (VCP + VFP). Máxima fidelidad MX (incl. plano de datos Trio virtual)
+  # pero el más pesado y lento en arrancar.
+  vmx:
+    label: "Juniper vMX"
+    os: junos
+    clabKind: juniper_vmx
+    image: "<<TU_IMAGEN_VMX>>"             # ej: vrnetlab/juniper_vmx:22.4R1.10
+    resources: { ramMB: 8192, vcpu: 4 }
+    bootTimeSec: 600
+    interfaces:
+      count: 10
+      junosPattern: "ge-0/0/{n}"
+      clabPattern: "eth{n+1}"              # VERIFICAR
+    console:
+      command: ["sshpass", "-e", "ssh", "-tt", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "${JUNOS_USER}@{container}"]
+      env: { SSHPASS: "$JUNOS_PASSWORD" }
+    exec:
+      command: ["sshpass", "-e", "ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "${JUNOS_USER}@{container}", "{cmd}"]
+      env: { SSHPASS: "$JUNOS_PASSWORD" }
+    linkControl: true
+    icon: router
+
+  # --- cJunosEvolved (PTX/ACX virtual, interfaces et-0/0/x).
+  cjunosevolved:
+    label: "Juniper cJunosEvolved"
+    os: junos
+    clabKind: juniper_cjunosevolved
+    image: "<<TU_IMAGEN_CJUNOSEVOLVED>>"
+    resources: { ramMB: 8192, vcpu: 4 }
+    bootTimeSec: 300
+    interfaces:
+      count: 12
+      junosPattern: "et-0/0/{n}"
+      clabPattern: "eth{n+4}"              # VERIFICAR: los primeros ethX suelen ser internos
+    console:
+      command: ["sshpass", "-e", "ssh", "-tt", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "${JUNOS_USER}@{container}"]
+      env: { SSHPASS: "$JUNOS_PASSWORD" }
+    exec:
+      command: ["sshpass", "-e", "ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "${JUNOS_USER}@{container}", "{cmd}"]
+      env: { SSHPASS: "$JUNOS_PASSWORD" }
+    linkControl: true
+    icon: router
+
+  # --- Nodo ligero open-source (~30 MB RAM) para ASes de relleno: Tier-1,
+  # clientes, IXP route-server, inyectores de prefijos. No es Junos: el panel
+  # de inspección mostrará la salida en bruto de vtysh.
+  frr:
+    label: "FRR (ligero)"
+    os: frr
+    clabKind: linux
+    image: "quay.io/frrouting/frr:10.2.1"
+    resources: { ramMB: 64, vcpu: 0.2 }
+    bootTimeSec: 5
+    interfaces:
+      count: 8
+      junosPattern: "eth{n+1}"
+      clabPattern: "eth{n+1}"
+    clabExtra:
+      binds:
+        - "{configDir}/{node}.frr.conf:/etc/frr/frr.conf"
+        - "{configDir}/daemons:/etc/frr/daemons"
+    console: { command: ["docker", "exec", "-it", "{container}", "vtysh"] }
+    exec:    { command: ["docker", "exec", "{container}", "vtysh", "-c", "{cmd}"] }
+    linkControl: true
+    icon: cloud

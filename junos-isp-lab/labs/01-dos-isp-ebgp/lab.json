@@ -1,0 +1,39 @@
+{
+  "name": "dos-isp-ebgp",
+  "description": "ISP-A (AS65001) e ISP-B (AS65002): OSPF interno, iBGP entre loopbacks con next-hop-self y dos enlaces eBGP (primario/backup).",
+  "nodes": [
+    { "id": "a-pe1", "kind": "vjunos-router", "asn": 65001, "group": "ISP-A", "label": "A-PE1", "position": { "x": 80,  "y": 80 } },
+    { "id": "a-pe2", "kind": "vjunos-router", "asn": 65001, "group": "ISP-A", "label": "A-PE2", "position": { "x": 80,  "y": 340 } },
+    { "id": "b-pe1", "kind": "vjunos-router", "asn": 65002, "group": "ISP-B", "label": "B-PE1", "position": { "x": 520, "y": 340 } },
+    { "id": "b-pe2", "kind": "vjunos-router", "asn": 65002, "group": "ISP-B", "label": "B-PE2", "position": { "x": 520, "y": 80 } }
+  ],
+  "links": [
+    { "id": "a-core",     "a": { "node": "a-pe1", "iface": "ge-0/0/0" }, "b": { "node": "a-pe2", "iface": "ge-0/0/0" } },
+    { "id": "b-core",     "a": { "node": "b-pe1", "iface": "ge-0/0/0" }, "b": { "node": "b-pe2", "iface": "ge-0/0/0" } },
+    { "id": "ebgp-prim",  "a": { "node": "a-pe2", "iface": "ge-0/0/1" }, "b": { "node": "b-pe1", "iface": "ge-0/0/1" } },
+    { "id": "ebgp-backup","a": { "node": "a-pe1", "iface": "ge-0/0/1" }, "b": { "node": "b-pe2", "iface": "ge-0/0/1" } }
+  ],
+  "checks": [
+    { "type": "ospf-full", "node": "a-pe1", "minNeighbors": 1, "description": "OSPF Full dentro de ISP-A" },
+    { "type": "ospf-full", "node": "b-pe1", "minNeighbors": 1, "description": "OSPF Full dentro de ISP-B" },
+    { "type": "route-present", "node": "a-pe1", "prefix": "10.0.0.2/32", "protocol": "OSPF", "description": "Loopback de A-PE2 alcanzable por OSPF (requisito iBGP)" },
+    { "type": "bgp-established", "node": "a-pe1", "peer": "10.0.0.2", "description": "iBGP A-PE1 ↔ A-PE2 (loopbacks)" },
+    { "type": "bgp-established", "node": "b-pe1", "peer": "10.1.0.2", "description": "iBGP B-PE1 ↔ B-PE2 (loopbacks)" },
+    { "type": "bgp-established", "node": "a-pe2", "peer": "192.0.2.2", "description": "eBGP primario A-PE2 ↔ B-PE1" },
+    { "type": "bgp-established", "node": "a-pe1", "peer": "192.0.2.6", "description": "eBGP backup A-PE1 ↔ B-PE2" },
+    { "type": "route-present", "node": "a-pe1", "prefix": "198.51.100.0/24", "protocol": "BGP", "description": "ISP-A aprende el prefijo de clientes de ISP-B" },
+    { "type": "route-present", "node": "b-pe2", "prefix": "203.0.113.0/24", "protocol": "BGP", "description": "ISP-B aprende el prefijo de clientes de ISP-A" },
+    { "type": "route-aspath", "node": "a-pe1", "prefix": "198.51.100.0/24", "contains": "65002", "description": "El AS-PATH contiene 65002" }
+  ],
+  "guide": [
+    "1. Pulsa **Deploy** y espera a que los 4 nodos arranquen (vJunos tarda varios minutos; el mock es instantáneo).",
+    "2. Pulsa **Cargar configs** para empujar la configuración base (direccionamiento, OSPF, iBGP, eBGP). Revísala en el editor de config de cada nodo.",
+    "3. En A-PE1: `show ospf neighbor` y `show route 10.0.0.2` → la loopback del vecino iBGP debe venir por OSPF.",
+    "4. `show bgp summary` en los 4 equipos. Los peers deben estar en Established.",
+    "5. En A-PE1: `show route 198.51.100.0/24` → ¿por dónde sale? Al tener eBGP directo por el enlace *backup*, A-PE1 lo prefiere (eBGP > iBGP).",
+    "6. **Reto Local-Pref**: haz que ISP-A use SIEMPRE el enlace primario. En A-PE1: `set policy-options policy-statement BACKUP-IN then local-preference 50` + `set protocols bgp group EBGP-B import BACKUP-IN` y `commit`. Verifica que 198.51.100.0/24 pasa a ir vía iBGP (10.0.0.2).",
+    "7. **Reto AS-PATH prepend**: haz que ISP-B también prefiera el primario para volver a 203.0.113.0/24. En A-PE1 añade `then as-path-prepend \"65001 65001\"` a la política de export eBGP y comprueba en B-PE2 `show route 203.0.113.0/24` (AS path más largo vía backup).",
+    "8. **Failover**: haz clic en el enlace `ebgp-prim` y córtalo. Observa cómo caen la sesión eBGP y la ruta, y cómo converge por el backup. Vuelve a levantarlo.",
+    "9. Pulsa **Validar** para comprobar el laboratorio automáticamente."
+  ]
+}
