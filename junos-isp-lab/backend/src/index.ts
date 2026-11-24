@@ -11,7 +11,8 @@ import * as store from "./store.js";
 import { VIEWS, safeJson, type ViewName } from "./junos/parse.js";
 import { pushSetConfig } from "./junos/configpush.js";
 import { runChecks } from "./validate.js";
-import type { LabStatus, ServerEvent } from "./types.js";
+import type { Check, LabStatus, ProtoBgp, ProtoOspf, ServerEvent, Topology } from "./types.js";
+import type { BgpPeerRow, OspfNbrRow } from "./junos/parse.js";
 
 const catalog = loadCatalog();
 const driver: NetworkDriver = env.driver === "containerlab" ? new ContainerlabDriver(catalog) : new MockDriver();
@@ -35,6 +36,43 @@ setInterval(async () => {
     try { emit({ type: "links", lab, links: await driver.linkStates(store.loadTopology(lab)) }); } catch { /* ignora */ }
   }
 }, 4000);
+
+// Sondeo de protocolos: pregunta a los routers Junos por BGP/OSPF y emite los cambios
+// como eventos ("BGP a-pe1 → 10.0.0.2: Active → Established"). PROTO_POLL_SEC=0 lo desactiva.
+const protoPoll = Number(process.env.PROTO_POLL_SEC ?? 5) * 1000;
+const lastProto = new Map<string, Map<string, string>>();
+async function pollProto(topo: Topology) {
+  const bgp: ProtoBgp[] = [], ospf: ProtoOspf[] = [];
+  await Promise.all(topo.nodes.filter((n) => catalog[n.kind]?.os === "junos").map(async (n) => {
+    const get = async <T,>(v: "bgp" | "ospf") => {
+      try { return VIEWS[v].parse(safeJson(await driver.exec(topo, n.id, VIEWS[v].cmd))) as T[]; } catch { return [] as T[]; }
+    };
+    const [b, o] = await Promise.all([get<BgpPeerRow>("bgp"), get<OspfNbrRow>("ospf")]);
+    b.forEach((x) => bgp.push({ node: n.id, peer: x.peer, asn: x.asn, state: x.state }));
+    o.forEach((x) => ospf.push({ node: n.id, iface: x.iface, neighbor: x.address, state: x.state }));
+  }));
+  const now = new Map<string, string>([
+    ...bgp.map((x) => [`BGP ${x.node} → ${x.peer}`, x.state] as [string, string]),
+    ...ospf.map((x) => [`OSPF ${x.node} ${x.iface}`, x.state] as [string, string]),
+  ]);
+  const prev = lastProto.get(topo.name);
+  if (prev) {
+    for (const [k, v] of now) if (prev.get(k) !== v) emit({ type: "log", lab: topo.name, line: `[estado] ${k}: ${prev.get(k) ?? "—"} → ${v}` });
+    for (const [k, v] of prev) if (!now.has(k)) emit({ type: "log", lab: topo.name, line: `[estado] ${k}: ${v} → Down` });
+  }
+  lastProto.set(topo.name, now);
+  emit({ type: "proto", lab: topo.name, bgp, ospf });
+}
+if (protoPoll > 0) {
+  let busyPoll = false;
+  setInterval(async () => {
+    if (busyPoll) return;
+    busyPoll = true;
+    try {
+      for (const [lab, s] of status) if (s === "running") await pollProto(store.loadTopology(lab)).catch(() => {});
+    } finally { busyPoll = false; }
+  }, protoPoll);
+}
 
 // ------------------------------------------------------------ API REST
 const app = express();
@@ -131,6 +169,8 @@ app.post("/api/labs/:name/links/:id", h(async (req) => {
 }));
 
 app.post("/api/labs/:name/validate", h(async (req) => runChecks(driver, store.loadTopology(req.params.name))));
+// Comprobaciones arbitrarias (las usa la lección para saber si un paso está cumplido)
+app.post("/api/labs/:name/check", h(async (req) => runChecks(driver, store.loadTopology(req.params.name), (req.body?.checks ?? []) as Check[])));
 
 // Frontend compilado (modo producción)
 if (existsSync(env.frontendDist)) {

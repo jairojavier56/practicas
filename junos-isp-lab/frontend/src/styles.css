@@ -96,3 +96,33 @@ pre.log { max-height: none; }
          grid-template-areas: "top top" "pal canvas" "term term" "side side"; height: auto; min-height: 100vh; }
   .canvas { min-height: 420px; }
 }
+
+/* ---- Lección guiada ---- */
+.lesson-head { border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.progress-bar { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.progress-bar i { display: block; height: 100%; background: var(--ok); transition: width .4s; }
+.lesson-steps { list-style: none; padding: 0; margin: 8px 0; }
+.lstep { border-bottom: 1px solid var(--border); padding: 6px 0; }
+.lstep-head { display: flex; gap: 8px; align-items: center; width: 100%; border: 0; background: transparent; text-align: left; font-weight: 600; padding: 2px 0; }
+.lnum { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--border); display: grid; place-items: center; font-size: 11px; flex: none; color: var(--muted); }
+.lstep.current .lnum { border-color: var(--accent); color: var(--accent); }
+.lstep.done .lnum { background: var(--ok); border-color: var(--ok); color: #fff; }
+.lstep-body { margin: 6px 0 4px 30px; display: grid; gap: 8px; }
+.lstep-body p { margin: 0; }
+.cmd { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.cmd-top { display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: var(--bg); font-size: 12px; }
+.cmd-top button { margin-left: auto; }
+button.small { padding: 1px 8px; font-size: 12px; }
+.cmd pre { margin: 0; padding: 6px 8px; font-size: 12px; overflow-x: auto; }
+.observe { border-left: 3px solid var(--warn); padding: 4px 8px; background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.observe b, .resultbox b { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.observe b { color: var(--warn); }
+.resultbox { border-left: 3px solid var(--ok); padding: 4px 8px; background: color-mix(in srgb, var(--ok) 9%, transparent); }
+.resultbox b { color: var(--ok); }
+.waiting { margin: 0; padding-left: 16px; font-size: 12px; color: var(--muted); }
+.live { display: grid; gap: 3px; font-size: 12px; }
+.live > div { display: flex; align-items: center; gap: 6px; }
+.live .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.live .st { margin-left: auto; font-family: ui-monospace, monospace; }
+.live .ok { color: var(--ok); } .live .bad { color: var(--bad); } .live .warn { color: var(--warn); }
+pre.log.small { max-height: 200px; font-size: 11.5px; }

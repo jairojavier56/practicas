@@ -21,6 +21,7 @@ export const TopologyZ = z.object({
   links: z.array(z.object({ id: z.string(), a: EndpointZ, b: EndpointZ })),
   checks: z.array(z.any()).optional(),
   guide: z.array(z.string()).optional(),
+  lesson: z.any().optional(),
 });
 
 const topoDir = () => path.join(env.dataDir, "topologies");

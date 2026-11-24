@@ -25,7 +25,20 @@ export type Check =
   | { type: "ospf-full"; node: string; minNeighbors: number; description?: string }
   | { type: "isis-up"; node: string; minAdjacencies: number; description?: string }
   | { type: "route-present"; node: string; prefix: string; protocol?: string; description?: string }
-  | { type: "route-aspath"; node: string; prefix: string; contains: string; description?: string };
+  | { type: "route-aspath"; node: string; prefix: string; contains: string; description?: string }
+  | { type: "route-via"; node: string; prefix: string; via: string; description?: string }
+  | { type: "link-state"; link: string; state: "up" | "down"; node?: string; description?: string };
+
+/** Paso de una lección guiada (mismo formato que la lección interactiva del navegador). */
+export interface LessonStep {
+  title: string;
+  text: string;
+  cmds: { node: string; lines: string[] }[];
+  observe: string;
+  result: string;
+  check: Check[]; // deben cumplirse a la vez AHORA
+  seen?: Check[]; // deben haberse cumplido juntos en algún momento (p. ej. durante un failover)
+}
 
 export interface Topology {
   name: string; // nombre del lab (se usa como nombre de lab de containerlab)
@@ -34,6 +47,7 @@ export interface Topology {
   links: LabLink[];
   checks?: Check[];
   guide?: string[]; // pasos del laboratorio guiado (markdown simple)
+  lesson?: { title: string; intro?: string; steps: LessonStep[] };
 }
 
 export type LabStatus = "stopped" | "deploying" | "running" | "destroying" | "error";
@@ -46,4 +60,8 @@ export interface LinkState {
 export type ServerEvent =
   | { type: "status"; lab: string; status: LabStatus; message?: string }
   | { type: "log"; lab: string; line: string }
-  | { type: "links"; lab: string; links: LinkState[] };
+  | { type: "links"; lab: string; links: LinkState[] }
+  | { type: "proto"; lab: string; bgp: ProtoBgp[]; ospf: ProtoOspf[] };
+
+export interface ProtoBgp { node: string; peer: string; asn: string; state: string }
+export interface ProtoOspf { node: string; iface: string; neighbor: string; state: string }

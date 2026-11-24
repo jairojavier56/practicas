@@ -8,7 +8,8 @@ import { api, connectEvents } from "./api";
 import { RouterNode, groupColor, type RouterNodeType } from "./components/RouterNode";
 import { TerminalPane } from "./components/TerminalPane";
 import { Inspector } from "./components/Inspector";
-import type { Catalog, CheckResult, LabStatus, LinkStateValue, Topology } from "./types";
+import { Lesson } from "./components/Lesson";
+import type { Catalog, CheckResult, LabStatus, LinkStateValue, ProtoBgp, ProtoOspf, Topology } from "./types";
 
 const nodeTypes = { router: RouterNode };
 const emptyTopo = (name: string): Topology => ({ name, nodes: [], links: [] });
@@ -24,6 +25,7 @@ function Editor() {
   const [status, setStatus] = useState<Record<string, LabStatus>>({});
   const [linkStates, setLinkStates] = useState<Record<string, LinkStateValue>>({});
   const [logs, setLogs] = useState<string[]>([]);
+  const [proto, setProto] = useState<{ bgp: ProtoBgp[]; ospf: ProtoOspf[] }>({ bgp: [], ospf: [] });
   const [selected, setSelected] = useState<{ type: "node" | "link"; id: string } | null>(null);
   const [terms, setTerms] = useState<string[]>([]);
   const [activeTerm, setActiveTerm] = useState<string | null>(null);
@@ -56,6 +58,7 @@ function Editor() {
         setStatus((s) => ({ ...s, [e.lab]: e.status }));
         if (e.message) setLogs((l) => [...l.slice(-500), `[${e.lab}] ${e.status}: ${e.message}`]);
       } else if (e.type === "log") setLogs((l) => [...l.slice(-500), `[${e.lab}] ${e.line}`]);
+      else if (e.type === "proto" && e.lab === topoRef.current.name) setProto({ bgp: e.bgp, ospf: e.ospf });
       else if (e.type === "links" && e.lab === topoRef.current.name)
         setLinkStates(Object.fromEntries(e.links.map((x) => [x.id, x.state])));
     });
@@ -63,7 +66,7 @@ function Editor() {
 
   const openLab = async (name: string) => {
     const t = await api.topology(name);
-    setTopo(t); setDirty(false); setSelected(null); setChecks(null); setLinkStates({});
+    setTopo(t); setDirty(false); setSelected(null); setChecks(null); setLinkStates({}); setProto({ bgp: [], ospf: [] });
     setTerms([]); setActiveTerm(null);
     const s = await api.status(name);
     setStatus((x) => ({ ...x, [name]: s.status as LabStatus }));
@@ -247,12 +250,16 @@ function Editor() {
       <aside className="side">
         <div className="tabs">
           <button className={side === "inspector" ? "active" : ""} onClick={() => setSide("inspector")}>Inspector</button>
-          <button className={side === "guia" ? "active" : ""} onClick={() => setSide("guia")}>Guía / Validación</button>
+          <button className={side === "guia" ? "active" : ""} onClick={() => setSide("guia")}>{topo.lesson ? "Lección" : "Guía / Validación"}</button>
           <button className={side === "log" ? "active" : ""} onClick={() => setSide("log")}>Log</button>
         </div>
         <div className="side-body">
           {side === "inspector" && <Inspector lab={topo.name} topo={topo} catalog={catalog} running={running} selected={selected} linkStates={linkStates} onTopo={update} />}
-          {side === "guia" && (
+          {side === "guia" && topo.lesson && (
+            <Lesson key={topo.name} lab={topo.name} topo={topo} running={running} openTerminal={openTerminal} proto={proto}
+              events={logs.filter((l) => l.startsWith(`[${topo.name}] [estado]`) || /commit|CORTADO|restaurado/.test(l)).map((l) => l.replace(`[${topo.name}] `, ""))} />
+          )}
+          {side === "guia" && !topo.lesson && (
             <div>
               {topo.description && <p>{topo.description}</p>}
               {topo.guide?.length ? <ol className="guide">{topo.guide.map((g, i) => <li key={i} dangerouslySetInnerHTML={{ __html: mdInline(g.replace(/^\d+\.\s*/, "")) }} />)}</ol>

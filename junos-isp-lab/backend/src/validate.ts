@@ -11,9 +11,10 @@ async function view<T>(driver: NetworkDriver, topo: Topology, node: string, v: k
 }
 
 /** Ejecuta las validaciones del lab guiado contra los equipos (reales o mock). */
-export async function runChecks(driver: NetworkDriver, topo: Topology): Promise<CheckResult[]> {
+export async function runChecks(driver: NetworkDriver, topo: Topology, checks: Check[] = topo.checks ?? []): Promise<CheckResult[]> {
   const out: CheckResult[] = [];
-  for (const c of topo.checks ?? []) {
+  let links: Awaited<ReturnType<NetworkDriver["linkStates"]>> | undefined;
+  for (const c of checks) {
     try {
       switch (c.type) {
         case "bgp-established": {
@@ -40,6 +41,18 @@ export async function runChecks(driver: NetworkDriver, topo: Topology): Promise<
         case "route-aspath": {
           const r = (await view<RouteRow>(driver, topo, c.node, "routes", `${c.prefix} exact`)).find((x) => x.prefix === c.prefix && x.active);
           out.push({ check: c, ok: !!r?.asPath?.includes(c.contains), detail: r ? `AS path: ${r.asPath ?? "(vacío)"}` : "ruta no encontrada" });
+          break;
+        }
+        case "route-via": {
+          // Interfaz de salida de la ruta activa (vale igual para eBGP directo que para iBGP resuelto por IGP)
+          const r = (await view<RouteRow>(driver, topo, c.node, "routes", `${c.prefix} exact`)).find((x) => x.prefix === c.prefix && x.active);
+          out.push({ check: c, ok: r?.via === c.via, detail: r ? `sale por ${r.via ?? "-"} (${r.protocol})` : "ruta no encontrada" });
+          break;
+        }
+        case "link-state": {
+          links ??= await driver.linkStates(topo);
+          const l = links.find((x) => x.id === c.link);
+          out.push({ check: c, ok: l?.state === c.state, detail: `enlace ${c.link}: ${l?.state ?? "desconocido"}` });
           break;
         }
       }

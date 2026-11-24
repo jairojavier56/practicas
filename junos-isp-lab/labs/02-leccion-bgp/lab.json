@@ -1,0 +1,440 @@
+{
+  "name": "leccion-bgp",
+  "description": "Lección 1 sobre Juniper real: configuras ISP-A (OSPF, iBGP, eBGP primario y backup, Local-Pref) contra un ISP-B ya configurado.",
+  "nodes": [
+    {
+      "id": "a-pe1",
+      "kind": "vjunos-router",
+      "asn": 65001,
+      "group": "ISP-A",
+      "label": "A-PE1",
+      "position": {
+        "x": 80,
+        "y": 80
+      }
+    },
+    {
+      "id": "a-pe2",
+      "kind": "vjunos-router",
+      "asn": 65001,
+      "group": "ISP-A",
+      "label": "A-PE2",
+      "position": {
+        "x": 80,
+        "y": 340
+      }
+    },
+    {
+      "id": "b-pe1",
+      "kind": "vjunos-router",
+      "asn": 65002,
+      "group": "ISP-B",
+      "label": "B-PE1",
+      "position": {
+        "x": 520,
+        "y": 340
+      }
+    },
+    {
+      "id": "b-pe2",
+      "kind": "vjunos-router",
+      "asn": 65002,
+      "group": "ISP-B",
+      "label": "B-PE2",
+      "position": {
+        "x": 520,
+        "y": 80
+      }
+    }
+  ],
+  "links": [
+    {
+      "id": "a-core",
+      "a": {
+        "node": "a-pe1",
+        "iface": "ge-0/0/0"
+      },
+      "b": {
+        "node": "a-pe2",
+        "iface": "ge-0/0/0"
+      }
+    },
+    {
+      "id": "b-core",
+      "a": {
+        "node": "b-pe1",
+        "iface": "ge-0/0/0"
+      },
+      "b": {
+        "node": "b-pe2",
+        "iface": "ge-0/0/0"
+      }
+    },
+    {
+      "id": "ebgp-prim",
+      "a": {
+        "node": "a-pe2",
+        "iface": "ge-0/0/1"
+      },
+      "b": {
+        "node": "b-pe1",
+        "iface": "ge-0/0/1"
+      }
+    },
+    {
+      "id": "ebgp-backup",
+      "a": {
+        "node": "a-pe1",
+        "iface": "ge-0/0/1"
+      },
+      "b": {
+        "node": "b-pe2",
+        "iface": "ge-0/0/1"
+      }
+    }
+  ],
+  "checks": [
+    {
+      "type": "ospf-full",
+      "node": "a-pe1",
+      "minNeighbors": 1,
+      "description": "OSPF Full dentro de ISP-A"
+    },
+    {
+      "type": "ospf-full",
+      "node": "b-pe1",
+      "minNeighbors": 1,
+      "description": "OSPF Full dentro de ISP-B"
+    },
+    {
+      "type": "route-present",
+      "node": "a-pe1",
+      "prefix": "10.0.0.2/32",
+      "protocol": "OSPF",
+      "description": "Loopback de A-PE2 alcanzable por OSPF (requisito iBGP)"
+    },
+    {
+      "type": "bgp-established",
+      "node": "a-pe1",
+      "peer": "10.0.0.2",
+      "description": "iBGP A-PE1 ↔ A-PE2 (loopbacks)"
+    },
+    {
+      "type": "bgp-established",
+      "node": "b-pe1",
+      "peer": "10.1.0.2",
+      "description": "iBGP B-PE1 ↔ B-PE2 (loopbacks)"
+    },
+    {
+      "type": "bgp-established",
+      "node": "a-pe2",
+      "peer": "192.0.2.2",
+      "description": "eBGP primario A-PE2 ↔ B-PE1"
+    },
+    {
+      "type": "bgp-established",
+      "node": "a-pe1",
+      "peer": "192.0.2.6",
+      "description": "eBGP backup A-PE1 ↔ B-PE2"
+    },
+    {
+      "type": "route-present",
+      "node": "a-pe1",
+      "prefix": "198.51.100.0/24",
+      "protocol": "BGP",
+      "description": "ISP-A aprende el prefijo de clientes de ISP-B"
+    },
+    {
+      "type": "route-present",
+      "node": "b-pe2",
+      "prefix": "203.0.113.0/24",
+      "protocol": "BGP",
+      "description": "ISP-B aprende el prefijo de clientes de ISP-A"
+    },
+    {
+      "type": "route-aspath",
+      "node": "a-pe1",
+      "prefix": "198.51.100.0/24",
+      "contains": "65002",
+      "description": "El AS-PATH contiene 65002"
+    }
+  ],
+  "lesson": {
+    "title": "Lección 1 · OSPF, iBGP y eBGP con primario y backup",
+    "intro": "Eres el ingeniero de ISP-A (AS65001). ISP-B (AS65002) ya está configurado y espera tus sesiones. Ejecuta cada paso (a mano o con ▶) y mira cómo reacciona la red.",
+    "steps": [
+      {
+        "title": "Explora tu router",
+        "text": "Tus routers tienen IPs y políticas, pero ningún protocolo de enrutamiento.",
+        "cmds": [
+          {
+            "node": "a-pe1",
+            "lines": [
+              "show interfaces terse",
+              "show route",
+              "show bgp summary"
+            ]
+          }
+        ],
+        "observe": "Solo hay rutas Direct, Local y una Static (tu prefijo de clientes 203.0.113.0/24). BGP no está corriendo.",
+        "result": "Sin IGP, A-PE1 no conoce la loopback de A-PE2 (10.0.0.2), y sin esa ruta no puede haber iBGP entre loopbacks.",
+        "check": [
+          {
+            "type": "route-present",
+            "node": "a-pe1",
+            "prefix": "203.0.113.0/24",
+            "protocol": "Static",
+            "description": "A-PE1 responde"
+          }
+        ]
+      },
+      {
+        "title": "Levanta OSPF dentro de ISP-A",
+        "text": "OSPF da a cada router la ruta hacia las loopbacks de sus compañeros.",
+        "cmds": [
+          {
+            "node": "a-pe1",
+            "lines": [
+              "configure",
+              "set protocols ospf area 0.0.0.0 interface ge-0/0/0.0 interface-type p2p",
+              "set protocols ospf area 0.0.0.0 interface lo0.0 passive",
+              "commit and-quit"
+            ]
+          },
+          {
+            "node": "a-pe2",
+            "lines": [
+              "configure",
+              "set protocols ospf area 0.0.0.0 interface ge-0/0/0.0 interface-type p2p",
+              "set protocols ospf area 0.0.0.0 interface lo0.0 passive",
+              "commit and-quit"
+            ]
+          },
+          {
+            "node": "a-pe1",
+            "lines": [
+              "show ospf neighbor",
+              "show route 10.0.0.2"
+            ]
+          }
+        ],
+        "observe": "La adyacencia pasa por Init/ExStart/Exchange hasta Full en unos segundos.",
+        "result": "10.0.0.2/32 aparece como [OSPF/10] vía ge-0/0/0.0: la loopback del vecino iBGP ya es alcanzable.",
+        "check": [
+          {
+            "type": "ospf-full",
+            "node": "a-pe1",
+            "minNeighbors": 1,
+            "description": "OSPF Full en A-PE1"
+          },
+          {
+            "type": "route-present",
+            "node": "a-pe1",
+            "prefix": "10.0.0.2/32",
+            "protocol": "OSPF",
+            "description": "Loopback de A-PE2 por OSPF"
+          }
+        ]
+      },
+      {
+        "title": "Sesión iBGP entre loopbacks",
+        "text": "La política IBGP-OUT ya existe y hace next-hop self.",
+        "cmds": [
+          {
+            "node": "a-pe1",
+            "lines": [
+              "configure",
+              "set protocols bgp group IBGP type internal",
+              "set protocols bgp group IBGP local-address 10.0.0.1",
+              "set protocols bgp group IBGP export IBGP-OUT",
+              "set protocols bgp group IBGP neighbor 10.0.0.2",
+              "commit and-quit"
+            ]
+          },
+          {
+            "node": "a-pe2",
+            "lines": [
+              "configure",
+              "set protocols bgp group IBGP type internal",
+              "set protocols bgp group IBGP local-address 10.0.0.2",
+              "set protocols bgp group IBGP export IBGP-OUT",
+              "set protocols bgp group IBGP neighbor 10.0.0.1",
+              "commit and-quit"
+            ]
+          },
+          {
+            "node": "a-pe1",
+            "lines": [
+              "show bgp summary"
+            ]
+          }
+        ],
+        "observe": "La sesión pasa por Active/Connect/OpenSent hasta Established.",
+        "result": "iBGP Established. De momento solo intercambias tu propio prefijo 203.0.113.0/24.",
+        "check": [
+          {
+            "type": "bgp-established",
+            "node": "a-pe1",
+            "peer": "10.0.0.2",
+            "description": "iBGP A-PE1 ↔ A-PE2"
+          }
+        ]
+      },
+      {
+        "title": "eBGP primario hacia ISP-B",
+        "text": "B-PE1 ya tiene configurado a 192.0.2.1 (A-PE2) como vecino. Te falta tu lado.",
+        "cmds": [
+          {
+            "node": "a-pe2",
+            "lines": [
+              "configure",
+              "set protocols bgp group EBGP-B type external",
+              "set protocols bgp group EBGP-B peer-as 65002",
+              "set protocols bgp group EBGP-B export EBGP-OUT",
+              "set protocols bgp group EBGP-B neighbor 192.0.2.2",
+              "commit and-quit",
+              "show bgp summary"
+            ]
+          },
+          {
+            "node": "a-pe1",
+            "lines": [
+              "show route 198.51.100.0/24 detail"
+            ]
+          }
+        ],
+        "observe": "A-PE1 recibe 198.51.100.0/24 por iBGP con Protocol next hop 10.0.0.2 (next-hop self) y AS path 65002.",
+        "result": "Todo ISP-A alcanza los clientes de ISP-B por el enlace primario.",
+        "check": [
+          {
+            "type": "bgp-established",
+            "node": "a-pe2",
+            "peer": "192.0.2.2",
+            "description": "eBGP primario"
+          },
+          {
+            "type": "route-present",
+            "node": "a-pe1",
+            "prefix": "198.51.100.0/24",
+            "protocol": "BGP",
+            "description": "A-PE1 aprende 198.51.100.0/24"
+          }
+        ]
+      },
+      {
+        "title": "Añade el enlace de backup",
+        "text": "A-PE1 también hace eBGP con B-PE2. Antes de ejecutar: ¿por dónde saldrá A-PE1 hacia 198.51.100.0/24?",
+        "cmds": [
+          {
+            "node": "a-pe1",
+            "lines": [
+              "configure",
+              "set protocols bgp group EBGP-B type external",
+              "set protocols bgp group EBGP-B peer-as 65002",
+              "set protocols bgp group EBGP-B export EBGP-OUT",
+              "set protocols bgp group EBGP-B neighbor 192.0.2.6",
+              "commit and-quit",
+              "show route 198.51.100.0/24"
+            ]
+          }
+        ],
+        "observe": "Hay dos rutas y la activa (*) es la de 192.0.2.6: ante igual local-pref y AS path, Junos prefiere eBGP sobre iBGP.",
+        "result": "El tráfico de A-PE1 sale por el enlace que querías de reserva. Lo arreglas en el siguiente paso.",
+        "check": [
+          {
+            "type": "bgp-established",
+            "node": "a-pe1",
+            "peer": "192.0.2.6",
+            "description": "eBGP backup"
+          },
+          {
+            "type": "route-via",
+            "node": "a-pe1",
+            "prefix": "198.51.100.0/24",
+            "via": "ge-0/0/1.0",
+            "description": "A-PE1 sale por el backup"
+          }
+        ]
+      },
+      {
+        "title": "Arregla la preferencia con Local-Preference",
+        "text": "Baja la local-preference de lo que entra por el backup (más alta gana; por defecto 100).",
+        "cmds": [
+          {
+            "node": "a-pe1",
+            "lines": [
+              "configure",
+              "set policy-options policy-statement BACKUP-IN then local-preference 50",
+              "set protocols bgp group EBGP-B import BACKUP-IN",
+              "show | compare",
+              "commit and-quit",
+              "show route 198.51.100.0/24"
+            ]
+          }
+        ],
+        "observe": "La ruta vía 192.0.2.6 sigue ahí con localpref 50, pero la activa vuelve a ser la iBGP (localpref 100).",
+        "result": "Local-Preference controla por dónde SALE el tráfico de tu AS.",
+        "check": [
+          {
+            "type": "bgp-established",
+            "node": "a-pe1",
+            "peer": "192.0.2.6",
+            "description": "eBGP backup sigue arriba"
+          },
+          {
+            "type": "route-via",
+            "node": "a-pe1",
+            "prefix": "198.51.100.0/24",
+            "via": "ge-0/0/0.0",
+            "description": "A-PE1 vuelve a salir por el core (primario)"
+          }
+        ]
+      },
+      {
+        "title": "Simula una caída del primario",
+        "text": "Selecciona el enlace ebgp-prim en el canvas y pulsa «Cortar enlace». Mira los eventos y la tabla de rutas. Después, «Restaurar».",
+        "cmds": [
+          {
+            "node": "a-pe1",
+            "lines": [
+              "show bgp summary",
+              "show route 198.51.100.0/24"
+            ]
+          }
+        ],
+        "observe": "La sesión eBGP de A-PE2 cae (tras el hold-time o al detectar el link down) y A-PE1 usa el backup aunque tenga localpref 50. Al restaurar, vuelve al primario.",
+        "result": "Has visto la convergencia BGP real de Junos: la redundancia funciona y la política devuelve el tráfico al primario.",
+        "seen": [
+          {
+            "type": "link-state",
+            "link": "ebgp-prim",
+            "state": "down",
+            "description": "primario cortado"
+          },
+          {
+            "type": "route-via",
+            "node": "a-pe1",
+            "prefix": "198.51.100.0/24",
+            "via": "ge-0/0/1.0",
+            "description": "failover al backup"
+          }
+        ],
+        "check": [
+          {
+            "type": "link-state",
+            "link": "ebgp-prim",
+            "state": "up",
+            "description": "primario restaurado"
+          },
+          {
+            "type": "route-via",
+            "node": "a-pe1",
+            "prefix": "198.51.100.0/24",
+            "via": "ge-0/0/0.0",
+            "description": "de vuelta al primario"
+          }
+        ]
+      }
+    ]
+  }
+}

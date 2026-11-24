@@ -1,4 +1,4 @@
-import type { Catalog, CheckResult, ServerEvent, Topology } from "./types";
+import type { Catalog, Check, CheckResult, ServerEvent, Topology } from "./types";
 
 async function req<T>(method: string, url: string, body?: unknown, text = false): Promise<T> {
   const r = await fetch(url, {
@@ -33,6 +33,7 @@ export const api = {
   exec: (n: string, node: string, cmd: string) => req<{ output: string }>("POST", `${lab(n)}/nodes/${node}/exec`, { cmd }),
   setLink: (n: string, id: string, up: boolean) => req("POST", `${lab(n)}/links/${id}`, { up }),
   validate: (n: string) => req<CheckResult[]>("POST", `${lab(n)}/validate`),
+  check: (n: string, checks: Check[]) => req<CheckResult[]>("POST", `${lab(n)}/check`, { checks }),
 };
 
 const wsBase = () => `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
