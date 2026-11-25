@@ -282,7 +282,7 @@ function Editor() {
 
       <section className="terminals">
         <div className="tabs">
-          {terms.length === 0 && <span className="muted">Doble clic en un router para abrir su consola Junos.</span>}
+          {terms.length === 0 && <span className="muted">Doble clic en un router para abrir su consola.</span>}
           {terms.map((t) => (
             <span key={t} className={`term-tab ${activeTerm === t ? "active" : ""}`} onClick={() => setActiveTerm(t)}>
               {t}

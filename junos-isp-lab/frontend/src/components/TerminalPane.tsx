@@ -5,7 +5,7 @@ import "@xterm/xterm/css/xterm.css";
 import { consoleUrl } from "../api";
 import { consoleBus } from "../consoleBus";
 
-/** Consola Junos embebida: xterm.js ⇄ WebSocket ⇄ PTY (docker exec / ssh) en el backend. */
+/** Consola del router (Junos, IOS, FRR) embebida: xterm.js ⇄ WebSocket ⇄ PTY (docker exec / ssh) en el backend. */
 export function TerminalPane({ lab, node, visible }: { lab: string; node: string; visible: boolean }) {
   const host = useRef<HTMLDivElement>(null);
   const fitRef = useRef<FitAddon | null>(null);

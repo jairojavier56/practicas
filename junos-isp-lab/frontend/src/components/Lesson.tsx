@@ -6,7 +6,7 @@ import type { ProtoBgp, ProtoOspf, Topology } from "../types";
 /**
  * Lección guiada sobre los routers REALES (o el mock): cada paso trae comandos
  * que se teclean en la consola del equipo y comprobaciones que el backend
- * ejecuta contra Junos para saber si la red llegó al estado esperado.
+ * ejecuta contra los routers (Junos o IOS) para saber si la red llegó al estado esperado.
  */
 export function Lesson({ lab, topo, running, openTerminal, proto, events }: {
   lab: string;
