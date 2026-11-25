@@ -34,7 +34,7 @@ sudo lab-import-image /ruta/x86_64_crb_linux-adventerprisek9-ms.iol --version 17
 sudo lab-import-image /ruta/junos-routing-crpd-docker-24.2R1.14.tgz
 ```
 
-Abre `http://localhost:8080` y carga el laboratorio guiado **mpls-l3vpn**: 11 nodos (unos 6 GB) con núcleo Cisco IOL, PEs y RR Juniper cRPD, IS-IS, LDP, route reflector, L3VPN con VRFs solapadas y un tránsito con políticas. Trae 8 pasos de lección con validación automática.
+Abre `http://localhost:8080` y carga el laboratorio guiado **mpls-l3vpn**: 11 nodos (unos 10 GB) con núcleo y RR Cisco IOL, un PE Juniper vJunos, IS-IS, LDP, route reflector, L3VPN con VRFs solapadas y un tránsito con políticas. Trae 8 pasos de lección con validación automática.
 
 | Imagen | Cómo la importa `lab-import-image` | Notas |
 |---|---|---|
@@ -44,6 +44,31 @@ Abre `http://localhost:8080` y carga el laboratorio guiado **mpls-l3vpn**: 11 no
 | vJunos (`.qcow2` o `.tgz` de PNETLab) | vrnetlab | Necesita KVM: úsalo para 1–2 routers, no para el lab grande |
 
 Interfaces: IOL usa `Ethernet0/1…0/3, 1/0…` (Ethernet0/0 es la gestión). cRPD y FRR usan `eth1, eth2…`. Las marcas `VERIFICAR` de `config/images.example.yaml` indican qué comprobar la primera vez.
+
+### En Windows (WSL2), con tus ficheros en Descargas
+
+1. **PowerShell como administrador:** `wsl --install -d Ubuntu-24.04` y reinicia.
+2. **Recursos de WSL.** Crea `C:\Users\<TU_USUARIO>\.wslconfig` con este contenido y ejecuta `wsl --shutdown`:
+   ```ini
+   [wsl2]
+   memory=14GB
+   processors=8
+   nestedVirtualization=true
+   ```
+   El lab `mpls-l3vpn` usa unos 10 GB: 6 Cisco IOL y 1 vJunos. `nestedVirtualization` solo hace falta para vJunos.
+3. **En Ubuntu (WSL):**
+   ```bash
+   git clone -b claude/practical-mendel-82nfq2 https://github.com/jairojavier56/practicas.git && cd practicas/junos-isp-lab && sudo ./install.sh
+   ```
+4. **Importa tus imágenes.** Windows se ve en `/mnt/c`:
+   ```bash
+   sudo lab-import-image /mnt/c/Users/<TU_USUARIO>/Downloads/x86_64_crb_linux-adventerprisek9-ms
+   ```
+   ```bash
+   sudo lab-import-image /mnt/c/Users/<TU_USUARIO>/Downloads/vJuniper/vjunosrouter-24.2R1-S2.5.tgz
+   ```
+   Los `.yml` de PNETLab no hacen falta. Comprueba `ls /dev/kvm` antes de desplegar vJunos.
+5. **Abre `http://localhost:8080`** en Windows y elige el laboratorio guiado **mpls-l3vpn**.
 
 ---
 

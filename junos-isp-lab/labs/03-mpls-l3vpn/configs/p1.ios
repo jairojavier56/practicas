@@ -1,4 +1,4 @@
-! ===== p1 (Cisco IOL, AS65000) — generado para el lab MPLS L3VPN =====
+! ===== p1 (Cisco IOL, AS65000) — generado por generate.py =====
 hostname p1
 ip bgp-community new-format
 interface Loopback0
@@ -30,7 +30,6 @@ interface Ethernet1/0
  ip address 10.1.7.2 255.255.255.252
  ip router isis CORE
  isis network point-to-point
- mpls ip
  no shutdown
 router isis CORE
  net 49.0001.0102.5500.0001.00

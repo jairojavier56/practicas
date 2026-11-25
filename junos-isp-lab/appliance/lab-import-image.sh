@@ -50,7 +50,7 @@ if [ -z "$KIND" ]; then
   case "$NAME" in
     *crpd*)                                   KIND=crpd ;;
     *linux-l2*|*l2-*.bin|*ioll2*)             echo "IOL L2 (switch) aún no está en el catálogo: importa el IOL L3"; exit 1 ;;
-    *.bin|*.iol|*linux-l3*|*iol*)             KIND=cisco-iol ;;
+    *.bin|*.iol|*linux-l3*|*iol*|*crb_linux*) KIND=cisco-iol ;;
     *cjunos*|*junosevolved*|*junos-evo*)      KIND=cjunosevolved ;;
     *vjunos-router*|*vjunosrouter*)           KIND=vjunos-router ;;
     *vsrx*)                                   KIND=vsrx ;;
@@ -72,6 +72,9 @@ case "$KIND" in
     DIR=cisco/iol
     [ -d "$VRNETLAB/$DIR" ] || { echo "No encuentro $VRNETLAB/$DIR (¿vrnetlab actualizado?)"; ls "$VRNETLAB/cisco" || true; exit 1; }
     VER=$(version_of "$FILE")
+    # El IOL de CML (x86_64_crb_linux-adventerprisek9-ms) no trae versión en el nombre: usamos "17"
+    # como etiqueta (solo es el tag de la imagen Docker). Con --version puedes poner la exacta.
+    if [ -z "$VER" ] && [[ "$NAME" == *crb_linux* ]]; then VER=17; echo "==> Sin versión en el nombre: se etiqueta como cisco_iol:17 (cámbialo con --version)"; fi
     [ -n "$VER" ] || { echo "El nombre '$NAME' no trae versión: usa --version (ej. --version 17.12.01)"; exit 1; }
     case "$NAME" in i86bi*) echo "AVISO: i86bi-* es IOL antiguo de 32 bits (15.x). Puede necesitar licencia iourc y no estar soportado por vrnetlab; lo recomendado es IOL 17.x (x86_64_crb_linux-*)." ;; esac
     rm -f "$VRNETLAB/$DIR"/cisco_iol-*.bin

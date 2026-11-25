@@ -1,4 +1,4 @@
-! ===== p2 (Cisco IOL, AS65000) — generado para el lab MPLS L3VPN =====
+! ===== p2 (Cisco IOL, AS65000) — generado por generate.py =====
 hostname p2
 ip bgp-community new-format
 interface Loopback0

@@ -1,4 +1,4 @@
-! ===== pe3 (Cisco IOL, AS65000) — generado para el lab MPLS L3VPN =====
+! ===== pe3 (Cisco IOL, AS65000) — generado por generate.py =====
 hostname pe3
 ip bgp-community new-format
 vrf definition CUST-B
@@ -43,10 +43,10 @@ mpls ldp router-id Loopback0 force
 router bgp 65000
  bgp router-id 10.255.0.13
  bgp log-neighbor-changes
- neighbor 192.0.2.2 remote-as 65100
  no bgp default ipv4-unicast
  neighbor 10.255.0.100 remote-as 65000
  neighbor 10.255.0.100 update-source Loopback0
+ neighbor 192.0.2.2 remote-as 65100
  address-family ipv4
   neighbor 10.255.0.100 activate
   neighbor 10.255.0.100 next-hop-self
@@ -65,11 +65,11 @@ router bgp 65000
   neighbor 172.17.2.2 activate
  exit-address-family
 ip route 198.51.100.0 255.255.255.0 Null0
-! Política de entrada del tránsito: marca y prefiere sus rutas
+! Entrada del tránsito: prefiere y marca sus rutas
 route-map UPSTREAM-IN permit 10
  set local-preference 120
  set community 65000:100
-! Política de salida: anuncia SOLO el agregado del ISP
+! Salida al tránsito: SOLO el agregado del ISP
 ip prefix-list ISP-AGG seq 10 permit 198.51.100.0/24
 route-map UPSTREAM-OUT permit 10
  match ip address prefix-list ISP-AGG

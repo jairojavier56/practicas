@@ -1,0 +1,45 @@
+! ===== rr1 (Cisco IOL, AS65000) — generado por generate.py =====
+hostname rr1
+ip bgp-community new-format
+interface Loopback0
+ ip address 10.255.0.100 255.255.255.255
+ ip router isis CORE
+interface Ethernet0/1
+ description -> p1
+ ip address 10.1.7.1 255.255.255.252
+ ip router isis CORE
+ isis network point-to-point
+ no shutdown
+router isis CORE
+ net 49.0001.0102.5500.0100.00
+ is-type level-2-only
+ metric-style wide
+ passive-interface Loopback0
+router bgp 65000
+ bgp router-id 10.255.0.100
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+ bgp cluster-id 10.255.0.100
+ neighbor PES peer-group
+ neighbor PES remote-as 65000
+ neighbor PES update-source Loopback0
+ neighbor 10.255.0.11 peer-group PES
+ neighbor 10.255.0.12 peer-group PES
+ neighbor 10.255.0.13 peer-group PES
+ address-family ipv4
+  neighbor PES activate
+  neighbor PES route-reflector-client
+  neighbor PES send-community both
+  neighbor 10.255.0.11 activate
+  neighbor 10.255.0.12 activate
+  neighbor 10.255.0.13 activate
+ exit-address-family
+ address-family vpnv4
+  neighbor PES activate
+  neighbor PES route-reflector-client
+  neighbor PES send-community extended
+  neighbor 10.255.0.11 activate
+  neighbor 10.255.0.12 activate
+  neighbor 10.255.0.13 activate
+ exit-address-family
+end

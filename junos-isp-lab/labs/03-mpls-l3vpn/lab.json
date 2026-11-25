@@ -1,6 +1,6 @@
 {
   "name": "mpls-l3vpn",
-  "description": "11 nodos (unos 6 GB): núcleo MPLS Cisco IOL + PEs/RR Juniper cRPD, IS-IS, LDP, RR, L3VPN con VRFs solapadas, tránsito con políticas. Clientes en FRR.",
+  "description": "11 nodos (~10 GB): núcleo y RR Cisco IOL, PE1 Juniper vJunos, IS-IS, LDP, RR, L3VPN con VRFs solapadas y tránsito con políticas. Clientes en FRR.",
   "nodes": [
     {
       "id": "p1",
@@ -47,6 +47,17 @@
       }
     },
     {
+      "id": "rr1",
+      "kind": "cisco-iol",
+      "asn": 65000,
+      "group": "ISP-CORE",
+      "label": "RR1",
+      "position": {
+        "x": 470,
+        "y": -120
+      }
+    },
+    {
       "id": "upstream",
       "kind": "cisco-iol",
       "asn": 65100,
@@ -59,24 +70,13 @@
     },
     {
       "id": "pe1",
-      "kind": "crpd",
+      "kind": "vjunos-router",
       "asn": 65000,
       "group": "ISP-CORE",
       "label": "PE1",
       "position": {
         "x": 220,
         "y": 60
-      }
-    },
-    {
-      "id": "rr1",
-      "kind": "crpd",
-      "asn": 65000,
-      "group": "ISP-CORE",
-      "label": "RR1",
-      "position": {
-        "x": 470,
-        "y": -120
       }
     },
     {
@@ -140,7 +140,7 @@
       "id": "pe1-p1",
       "a": {
         "node": "pe1",
-        "iface": "eth1"
+        "iface": "ge-0/0/0"
       },
       "b": {
         "node": "p1",
@@ -151,7 +151,7 @@
       "id": "pe1-p2",
       "a": {
         "node": "pe1",
-        "iface": "eth2"
+        "iface": "ge-0/0/1"
       },
       "b": {
         "node": "p2",
@@ -195,7 +195,7 @@
       "id": "rr1-p1",
       "a": {
         "node": "rr1",
-        "iface": "eth1"
+        "iface": "Ethernet0/1"
       },
       "b": {
         "node": "p1",
@@ -206,7 +206,7 @@
       "id": "ce-a1",
       "a": {
         "node": "pe1",
-        "iface": "eth3"
+        "iface": "ge-0/0/2"
       },
       "b": {
         "node": "ce-a1",
@@ -350,7 +350,7 @@
   ],
   "lesson": {
     "title": "MPLS L3VPN multivendor: IS-IS + LDP + RR + VRFs + política de tránsito",
-    "intro": "ISP AS65000 con núcleo Cisco IOL y PEs/RR Juniper cRPD. Dos clientes VPN (A y B, con direccionamiento solapado) y un tránsito. Las configs base ya están: pulsa «Cargar configs» y recorre la red capa a capa.",
+    "intro": "ISP AS65000 con núcleo y route reflector Cisco IOL y un PE Juniper (vJunos). Dos clientes VPN (A y B, con direccionamiento solapado) y un tránsito. Las configs base ya están: pulsa «Cargar configs» y recorre la red capa a capa. vJunos tarda unos minutos en arrancar: espera a que su consola responda.",
     "steps": [
       {
         "title": "IGP: IS-IS en el núcleo",
@@ -432,18 +432,18 @@
           {
             "node": "rr1",
             "lines": [
-              "show bgp summary"
+              "show bgp all summary"
             ]
           },
           {
-            "node": "pe2",
+            "node": "pe1",
             "lines": [
-              "show bgp all summary"
+              "show bgp summary"
             ]
           }
         ],
-        "observe": "RR1 tiene 3 clientes Established, con familias inet e inet-vpn. Los P no tienen BGP (núcleo BGP-free).",
-        "result": "El RR refleja rutas sin estar en el camino de los datos. La línea resolution-ribs le permite resolver next-hops VPN sin LSP.",
+        "observe": "RR1 (Cisco) tiene 3 clientes Established en IPv4 y VPNv4; PE1 (Junos) los ve con familias inet e inet-vpn. Los P no tienen BGP (núcleo BGP-free).",
+        "result": "El RR refleja rutas sin estar en el camino de los datos (ni siquiera tiene LDP).",
         "check": [
           {
             "type": "bgp-established",
@@ -634,7 +634,7 @@
             ]
           }
         ],
-        "observe": "Con el enlace caído, el LSP hacia PE2 pasa por eth2 (P2) y la ruta de la VPN no desaparece.",
+        "observe": "Con el enlace caído, el LSP de PE1 hacia PE2 sale por ge-0/0/1 (P2) y la ruta de la VPN no desaparece.",
         "result": "La VPN depende del LSP, no de un enlace concreto: el IGP y LDP reconstruyen el camino.",
         "seen": [
           {
