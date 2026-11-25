@@ -93,7 +93,7 @@ function authorized(header: string | undefined) {
 }
 app.use((req, res, next) => {
   if (authorized(req.headers.authorization)) return next();
-  res.set("WWW-Authenticate", 'Basic realm="Junos ISP Lab", charset="UTF-8"').status(401).send("Autenticación requerida");
+  res.set("WWW-Authenticate", 'Basic realm="ISP Lab", charset="UTF-8"').status(401).send("Autenticación requerida");
 });
 app.use(express.json({ limit: "2mb" }));
 app.use(express.text({ limit: "2mb" }));

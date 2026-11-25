@@ -185,7 +185,6 @@ function Editor() {
   return (
     <div className="app">
       <header className="toolbar">
-        <strong className="brand">⬢ Junos ISP Lab</strong>
         <select value={topo.name} onChange={(e) => openLab(e.target.value)}>
           {[...new Set([...labs, topo.name])].map((l) => <option key={l}>{l}</option>)}
         </select>
