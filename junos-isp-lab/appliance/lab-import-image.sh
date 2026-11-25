@@ -2,6 +2,8 @@
 # Importa una imagen Juniper a la appliance y la registra en config/images.yaml.
 #   sudo lab-import-image /ruta/junos-routing-crpd-docker-24.2R1.14.tgz
 #   sudo lab-import-image /ruta/vJunos-router-23.2R1.15.qcow2
+#   sudo lab-import-image /ruta/vjunosrouter-24.2R1-S2.5.tgz        (formato PNETLab/LabHub)
+#   sudo lab-import-image /opt/unetlab/addons/qemu/vjunosrouter-24.2R1-S2.5   (carpeta de PNETLab)
 # Opcional: forzar el tipo con  --kind crpd|vjunos-router|vmx|vsrx|cjunosevolved
 set -euo pipefail
 APP=${APP:-/opt/junos-isp-lab}
@@ -10,9 +12,30 @@ LAB_USER=${LAB_USER:-lab}
 
 KIND=""
 if [ "${1:-}" = "--kind" ]; then KIND=$2; shift 2; fi
-FILE=${1:?Uso: lab-import-image [--kind KIND] <fichero .qcow2|.tgz|.tar>}
-[ -f "$FILE" ] || { echo "No existe: $FILE"; exit 1; }
+FILE=${1:?Uso: lab-import-image [--kind KIND] <fichero .qcow2|.tgz|.tar | carpeta de PNETLab>}
+[ -e "$FILE" ] || { echo "No existe: $FILE"; exit 1; }
+FILE=$(realpath "$FILE")
 NAME=$(basename "$FILE" | tr 'A-Z' 'a-z')
+TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+
+# Versión a partir del nombre: vjunosrouter-24.2R1-S2.5.tgz → 24.2R1-S2.5
+version_of() { basename "$1" | sed -E 's/\.(tgz|tar\.gz|tar|qcow2)$//' | grep -oE '[0-9]+\.[0-9]+[A-Za-z][0-9A-Za-z.-]*' | head -1; }
+
+# ¿Formato PNETLab? (carpeta o .tgz con virtioa.qcow2 / hda.qcow2 dentro)
+PNET_DISK_RE='(^|/)(virtio[a-z]|hd[a-z]|sata[a-z])\.qcow2$'
+pnet_disk=""
+if [ -d "$FILE" ]; then
+  pnet_disk=$(find "$FILE" -maxdepth 2 -name '*.qcow2' | grep -E "$PNET_DISK_RE" | sort | head -1 || true)
+  [ -n "$pnet_disk" ] || { echo "La carpeta $FILE no contiene virtioa.qcow2/hda.qcow2"; exit 1; }
+elif [[ "$NAME" =~ \.(tgz|tar\.gz|tar)$ ]] && [[ "$NAME" != *crpd* ]] && [[ "$NAME" != *cjunos* ]] && [[ "$NAME" != vmx-bundle* ]]; then
+  echo "==> Inspeccionando $NAME (puede tardar en ficheros grandes)..."
+  inner=$(tar -tf "$FILE" | grep -E "$PNET_DISK_RE" | sort | head -1 || true)
+  if [ -n "$inner" ]; then
+    echo "==> Formato PNETLab detectado: extrayendo $inner"
+    tar -xf "$FILE" -C "$TMP" "$inner"
+    pnet_disk="$TMP/$inner"
+  fi
+fi
 
 if [ -z "$KIND" ]; then
   case "$NAME" in
@@ -44,7 +67,21 @@ case "$KIND" in
       echo "No encuentro $VRNETLAB/$DIR. Carpetas Juniper disponibles en vrnetlab:"; ls "$VRNETLAB/juniper" || true
       echo "Copia el fichero a la carpeta correcta y ejecuta 'make' allí, luego vuelve a lanzar con --kind."; exit 1
     fi
-    cp "$FILE" "$VRNETLAB/$DIR/"
+    if [ -n "$pnet_disk" ]; then
+      # vrnetlab deduce la versión del nombre del qcow2: lo renombramos como el oficial de Juniper
+      VER=$(version_of "$FILE")
+      [ -n "$VER" ] || { echo "No pude sacar la versión de '$NAME'. Renombra el fichero con la versión (ej. vjunosrouter-24.2R1-S2.5.tgz)"; exit 1; }
+      case "$KIND" in
+        vjunos-router) TARGET="vJunos-router-$VER.qcow2" ;;
+        vsrx)          TARGET="junos-vsrx3-x86-64-$VER.qcow2" ;;
+        vmx)           echo "vMX en formato PNETLab no está soportado por vrnetlab: usa el vmx-bundle-*.tgz oficial"; exit 1 ;;
+      esac
+      echo "==> $(basename "$pnet_disk") → $DIR/$TARGET"
+      rm -f "$VRNETLAB/$DIR"/*.qcow2
+      cp "$pnet_disk" "$VRNETLAB/$DIR/$TARGET"
+    else
+      cp "$FILE" "$VRNETLAB/$DIR/"
+    fi
     (cd "$VRNETLAB/$DIR" && make)
     TAG=$(comm -13 <(echo "$before") <(docker images --format '{{.Repository}}:{{.Tag}}' | sort) | grep -v '<none>' | head -1 || true)
     # Si la imagen ya existía (misma versión), toma la más reciente de ese tipo

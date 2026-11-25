@@ -99,7 +99,10 @@ chmod +x /etc/update-motd.d/99-junos-isp-lab
 
 if [ -d /opt/junos-images ] && [ -n "$(ls -A /opt/junos-images 2>/dev/null)" ]; then
   log "Importando imágenes incluidas en la ISO"
-  for f in /opt/junos-images/*; do "$APP/appliance/lab-import-image.sh" "$f" || echo "AVISO: no se pudo importar $f"; done
+  for f in /opt/junos-images/*; do
+    case "$f" in *.yml|*.yaml|*.txt|*.md) continue ;; esac   # plantillas de PNETLab, no son imágenes
+    "$APP/appliance/lab-import-image.sh" "$f" || echo "AVISO: no se pudo importar $f"
+  done
 fi
 
 touch "$STATE/firstboot.done"
