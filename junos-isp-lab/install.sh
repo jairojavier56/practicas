@@ -16,6 +16,14 @@ set -euo pipefail
 [ "$(id -u)" = 0 ] || exec sudo -E bash "$0" "$@"
 APP=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 LAB_USER=${SUDO_USER:-$(stat -c %U "$APP")}
+# El servicio corre como $LAB_USER: no puede vivir dentro de /root (permisos 700)
+if [[ "$APP" == /root/* ]] && [ "$LAB_USER" != root ]; then
+  echo "ERROR: el proyecto está en $APP y el servicio correrá como '$LAB_USER', que no puede entrar en /root."
+  echo "Muévelo a tu carpeta y repite:"
+  echo "  sudo mv /root/practicas /home/$LAB_USER/ && sudo chown -R $LAB_USER:$LAB_USER /home/$LAB_USER/practicas"
+  echo "  cd /home/$LAB_USER/practicas/junos-isp-lab && sudo ./install.sh"
+  exit 1
+fi
 if [ ! -f "$APP/.env" ] && [ -z "${WEB_PASSWORD:-}" ] && [ -t 0 ]; then
   echo "Contraseña para la web (usuario 'lab')."
   echo "Déjala vacía si solo vas a usarla desde este mismo PC (escuchará solo en localhost)."
