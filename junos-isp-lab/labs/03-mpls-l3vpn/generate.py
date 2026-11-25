@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Genera lab.json y configs/ del lab MPLS L3VPN (Cisco IOL + Juniper vJunos + FRR).
-Edita las tablas de arriba (nodos, enlaces, VRFs) y vuelve a ejecutar:  python3 generate.py"""
+Edita las tablas de abajo (nodos, enlaces, VRFs) y vuelve a ejecutar:
+    python3 generate.py                → este lab (PE1 = vJunos)
+    python3 generate.py --solo-cisco   → ../04-mpls-l3vpn-cisco (todo IOL, sin KVM)"""
 import json, os, re
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASN = 65000
@@ -138,8 +140,45 @@ router bgp 65100
 end
 """
 
-def main():
-    cfg = os.path.join(HERE, "configs"); os.makedirs(cfg, exist_ok=True)
+# ---- Variante "solo Cisco": PE1 pasa a IOL (para hosts sin KVM / sin vJunos) ----
+IOL_PE1 = {"ge-0/0/0": "Ethernet0/1", "ge-0/0/1": "Ethernet0/2", "ge-0/0/2": "Ethernet0/3"}
+JUNOS_TO_IOS = {
+    "show isis adjacency": "show isis neighbors",
+    "show route protocol isis": "show ip route isis",
+    "show ldp session": "show mpls ldp neighbor",
+    "show route table inet.3": "show mpls forwarding-table",
+    "show bgp summary": "show bgp all summary",
+    "show route table CUST-A.inet.0": "show ip route vrf CUST-A",
+    "show route table CUST-A.inet.0 192.168.20.0/24 detail": "show bgp vpnv4 unicast vrf CUST-A 192.168.20.0/24",
+    "show route 198.18.0.0/15 detail": "show bgp ipv4 unicast 198.18.0.0/15",
+    "show route 203.0.113.0/24": "show ip route 203.0.113.0",
+}
+
+def solo_cisco():
+    global L, VRF
+    KINDS["pe1"] = "cisco-iol"
+    L = [tuple(IOL_PE1.get(x, x) if i in (2, 5) and t[i - 1] == "pe1" else x for i, x in enumerate(t)) for t in L]
+    VRF["pe1"] = {IOL_PE1[k]: v for k, v in VRF["pe1"].items()}
+
+def lesson_solo_cisco(lesson):
+    lesson = json.loads(json.dumps(lesson))
+    lesson["title"] = lesson["title"] + " (solo Cisco IOL)"
+    lesson["intro"] = ("ISP AS65000 todo en Cisco IOL (no necesita KVM): núcleo, PEs y route reflector. Dos clientes VPN (A y B, con "
+                       "direccionamiento solapado) y un tránsito. Pulsa «Cargar configs» y recorre la red capa a capa.")
+    for st in lesson["steps"]:
+        for c in st["cmds"]:
+            if c["node"] == "pe1": c["lines"] = [JUNOS_TO_IOS.get(l, l) for l in c["lines"]]
+        for k in ("observe", "result"):
+            st[k] = (st[k].replace("PE1 (Junos)", "PE1").replace("PE1 (Juniper)", "PE1").replace("en PE1 (Junos)", "en PE1")
+                     .replace("(en PE1, Juniper)", "(en PE1)").replace("ge-0/0/1", "Ethernet0/2").replace("inet.3", "la LFIB")
+                     .replace("interoperando entre Junos e IOS", "sobre IOS").replace("PE1 (Junos) los ve con familias inet e inet-vpn", "PE1 los ve en IPv4 y VPNv4"))
+        st["text"] = st["text"].replace("(en PE1, Juniper)", "(en PE1)")
+    return lesson
+
+def main(variant="multivendor"):
+    if variant == "solo-cisco": solo_cisco()
+    out_dir = HERE if variant == "multivendor" else os.path.join(os.path.dirname(HERE), "04-mpls-l3vpn-cisco")
+    cfg = os.path.join(out_dir, "configs"); os.makedirs(cfg, exist_ok=True)
     for f in os.listdir(cfg):
         if f.endswith((".ios", ".set", ".frr.conf")): os.remove(os.path.join(cfg, f))
     for n, k in KINDS.items():
@@ -156,12 +195,17 @@ def main():
               "position": {"x": pos[n][0], "y": pos[n][1]}} for n in KINDS]
     links = [{"id": l[0], "a": {"node": l[1], "iface": l[2]}, "b": {"node": l[4], "iface": l[5]}} for l in L]
     lesson = json.load(open(os.path.join(HERE, "lesson.json")))
+    if variant == "solo-cisco": lesson = lesson_solo_cisco(lesson)
     checks = [c for s in lesson["steps"][:6] for c in s["check"]]
-    lab = {"name": "mpls-l3vpn",
-           "description": "11 nodos (~10 GB): núcleo y RR Cisco IOL, PE1 Juniper vJunos, IS-IS, LDP, RR, L3VPN con VRFs solapadas y tránsito con políticas. Clientes en FRR.",
+    lab = {"name": "mpls-l3vpn" if variant == "multivendor" else "mpls-l3vpn-cisco",
+           "description": ("11 nodos (~10 GB): núcleo y RR Cisco IOL, PE1 Juniper vJunos, IS-IS, LDP, RR, L3VPN con VRFs solapadas y tránsito con políticas. Clientes en FRR."
+                           if variant == "multivendor" else
+                           "11 nodos (~5 GB, sin KVM): todo Cisco IOL + clientes FRR. IS-IS, LDP, RR, L3VPN con VRFs solapadas y tránsito con políticas."),
            "nodes": nodes, "links": links, "checks": checks, "lesson": lesson}
-    json.dump(lab, open(os.path.join(HERE, "lab.json"), "w"), indent=2, ensure_ascii=False)
-    print(f"lab.json + {len(os.listdir(cfg))} ficheros en configs/")
+    json.dump(lab, open(os.path.join(out_dir, "lab.json"), "w"), indent=2, ensure_ascii=False)
+    import shutil; shutil.copy(os.path.join(HERE, "configs", "daemons"), os.path.join(cfg, "daemons")) if out_dir != HERE else None
+    print(f"{out_dir}: lab.json + {len(os.listdir(cfg))} ficheros en configs/")
 
 if __name__ == "__main__":
-    main()
+    import sys
+    main("solo-cisco" if "--solo-cisco" in sys.argv else "multivendor")

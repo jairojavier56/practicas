@@ -1,0 +1,41 @@
+! ===== p1 (Cisco IOL, AS65000) — generado por generate.py =====
+hostname p1
+ip bgp-community new-format
+interface Loopback0
+ ip address 10.255.0.1 255.255.255.255
+ ip router isis CORE
+interface Ethernet0/1
+ description -> p2
+ ip address 10.1.1.1 255.255.255.252
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+interface Ethernet0/2
+ description -> pe1
+ ip address 10.1.2.2 255.255.255.252
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+interface Ethernet0/3
+ description -> pe2
+ ip address 10.1.4.2 255.255.255.252
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+interface Ethernet1/0
+ description -> rr1
+ ip address 10.1.7.2 255.255.255.252
+ ip router isis CORE
+ isis network point-to-point
+ no shutdown
+router isis CORE
+ net 49.0001.0102.5500.0001.00
+ is-type level-2-only
+ metric-style wide
+ passive-interface Loopback0
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+end

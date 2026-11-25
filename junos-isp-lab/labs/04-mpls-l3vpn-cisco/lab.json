@@ -1,0 +1,672 @@
+{
+  "name": "mpls-l3vpn-cisco",
+  "description": "11 nodos (~5 GB, sin KVM): todo Cisco IOL + clientes FRR. IS-IS, LDP, RR, L3VPN con VRFs solapadas y tránsito con políticas.",
+  "nodes": [
+    {
+      "id": "p1",
+      "kind": "cisco-iol",
+      "asn": 65000,
+      "group": "ISP-CORE",
+      "label": "P1",
+      "position": {
+        "x": 470,
+        "y": 60
+      }
+    },
+    {
+      "id": "p2",
+      "kind": "cisco-iol",
+      "asn": 65000,
+      "group": "ISP-CORE",
+      "label": "P2",
+      "position": {
+        "x": 470,
+        "y": 300
+      }
+    },
+    {
+      "id": "pe2",
+      "kind": "cisco-iol",
+      "asn": 65000,
+      "group": "ISP-CORE",
+      "label": "PE2",
+      "position": {
+        "x": 720,
+        "y": 60
+      }
+    },
+    {
+      "id": "pe3",
+      "kind": "cisco-iol",
+      "asn": 65000,
+      "group": "ISP-CORE",
+      "label": "PE3",
+      "position": {
+        "x": 720,
+        "y": 300
+      }
+    },
+    {
+      "id": "rr1",
+      "kind": "cisco-iol",
+      "asn": 65000,
+      "group": "ISP-CORE",
+      "label": "RR1",
+      "position": {
+        "x": 470,
+        "y": -120
+      }
+    },
+    {
+      "id": "upstream",
+      "kind": "cisco-iol",
+      "asn": 65100,
+      "group": "TRANSITO",
+      "label": "UPSTREAM",
+      "position": {
+        "x": 720,
+        "y": 520
+      }
+    },
+    {
+      "id": "pe1",
+      "kind": "cisco-iol",
+      "asn": 65000,
+      "group": "ISP-CORE",
+      "label": "PE1",
+      "position": {
+        "x": 220,
+        "y": 60
+      }
+    },
+    {
+      "id": "ce-a1",
+      "kind": "frr",
+      "asn": 65501,
+      "group": "CLIENTE-A",
+      "label": "CE-A1",
+      "position": {
+        "x": 0,
+        "y": 60
+      }
+    },
+    {
+      "id": "ce-a2",
+      "kind": "frr",
+      "asn": 65502,
+      "group": "CLIENTE-A",
+      "label": "CE-A2",
+      "position": {
+        "x": 980,
+        "y": -40
+      }
+    },
+    {
+      "id": "ce-b1",
+      "kind": "frr",
+      "asn": 65511,
+      "group": "CLIENTE-B",
+      "label": "CE-B1",
+      "position": {
+        "x": 980,
+        "y": 130
+      }
+    },
+    {
+      "id": "ce-b2",
+      "kind": "frr",
+      "asn": 65512,
+      "group": "CLIENTE-B",
+      "label": "CE-B2",
+      "position": {
+        "x": 980,
+        "y": 300
+      }
+    }
+  ],
+  "links": [
+    {
+      "id": "p1-p2",
+      "a": {
+        "node": "p1",
+        "iface": "Ethernet0/1"
+      },
+      "b": {
+        "node": "p2",
+        "iface": "Ethernet0/1"
+      }
+    },
+    {
+      "id": "pe1-p1",
+      "a": {
+        "node": "pe1",
+        "iface": "Ethernet0/1"
+      },
+      "b": {
+        "node": "p1",
+        "iface": "Ethernet0/2"
+      }
+    },
+    {
+      "id": "pe1-p2",
+      "a": {
+        "node": "pe1",
+        "iface": "Ethernet0/2"
+      },
+      "b": {
+        "node": "p2",
+        "iface": "Ethernet0/2"
+      }
+    },
+    {
+      "id": "pe2-p1",
+      "a": {
+        "node": "pe2",
+        "iface": "Ethernet0/1"
+      },
+      "b": {
+        "node": "p1",
+        "iface": "Ethernet0/3"
+      }
+    },
+    {
+      "id": "pe3-p2",
+      "a": {
+        "node": "pe3",
+        "iface": "Ethernet0/1"
+      },
+      "b": {
+        "node": "p2",
+        "iface": "Ethernet0/3"
+      }
+    },
+    {
+      "id": "pe2-pe3",
+      "a": {
+        "node": "pe2",
+        "iface": "Ethernet0/2"
+      },
+      "b": {
+        "node": "pe3",
+        "iface": "Ethernet0/2"
+      }
+    },
+    {
+      "id": "rr1-p1",
+      "a": {
+        "node": "rr1",
+        "iface": "Ethernet0/1"
+      },
+      "b": {
+        "node": "p1",
+        "iface": "Ethernet1/0"
+      }
+    },
+    {
+      "id": "ce-a1",
+      "a": {
+        "node": "pe1",
+        "iface": "Ethernet0/3"
+      },
+      "b": {
+        "node": "ce-a1",
+        "iface": "eth1"
+      }
+    },
+    {
+      "id": "ce-a2",
+      "a": {
+        "node": "pe2",
+        "iface": "Ethernet0/3"
+      },
+      "b": {
+        "node": "ce-a2",
+        "iface": "eth1"
+      }
+    },
+    {
+      "id": "ce-b1",
+      "a": {
+        "node": "pe2",
+        "iface": "Ethernet1/0"
+      },
+      "b": {
+        "node": "ce-b1",
+        "iface": "eth1"
+      }
+    },
+    {
+      "id": "ce-b2",
+      "a": {
+        "node": "pe3",
+        "iface": "Ethernet0/3"
+      },
+      "b": {
+        "node": "ce-b2",
+        "iface": "eth1"
+      }
+    },
+    {
+      "id": "upstream",
+      "a": {
+        "node": "pe3",
+        "iface": "Ethernet1/0"
+      },
+      "b": {
+        "node": "upstream",
+        "iface": "Ethernet0/1"
+      }
+    }
+  ],
+  "checks": [
+    {
+      "type": "isis-up",
+      "node": "p1",
+      "minAdjacencies": 4,
+      "description": "P1 con 4 adyacencias IS-IS"
+    },
+    {
+      "type": "route-present",
+      "node": "pe1",
+      "prefix": "10.255.0.13/32",
+      "protocol": "IS-IS",
+      "description": "PE1 llega a la loopback de PE3"
+    },
+    {
+      "type": "ldp-up",
+      "node": "p1",
+      "minSessions": 3,
+      "description": "P1 con 3 sesiones LDP"
+    },
+    {
+      "type": "ldp-up",
+      "node": "pe1",
+      "minSessions": 2,
+      "description": "PE1 con LDP hacia P1 y P2"
+    },
+    {
+      "type": "bgp-established",
+      "node": "rr1",
+      "peer": "10.255.0.11",
+      "description": "RR1 ↔ PE1"
+    },
+    {
+      "type": "bgp-established",
+      "node": "rr1",
+      "peer": "10.255.0.12",
+      "description": "RR1 ↔ PE2"
+    },
+    {
+      "type": "bgp-established",
+      "node": "rr1",
+      "peer": "10.255.0.13",
+      "description": "RR1 ↔ PE3"
+    },
+    {
+      "type": "route-present",
+      "node": "pe1",
+      "vrf": "CUST-A",
+      "prefix": "192.168.20.0/24",
+      "protocol": "BGP",
+      "description": "PE1 aprende la sede A2"
+    },
+    {
+      "type": "route-present",
+      "node": "pe2",
+      "vrf": "CUST-A",
+      "prefix": "192.168.10.0/24",
+      "protocol": "BGP",
+      "description": "PE2 aprende la sede A1"
+    },
+    {
+      "type": "route-present",
+      "node": "pe3",
+      "vrf": "CUST-B",
+      "prefix": "192.168.10.0/24",
+      "protocol": "BGP",
+      "description": "PE3 ve la red de CE-B1 en CUST-B"
+    },
+    {
+      "type": "route-present",
+      "node": "pe2",
+      "vrf": "CUST-B",
+      "prefix": "192.168.30.0/24",
+      "protocol": "BGP",
+      "description": "PE2 ve la red de CE-B2 en CUST-B"
+    },
+    {
+      "type": "route-present",
+      "node": "pe1",
+      "prefix": "198.18.0.0/15",
+      "protocol": "BGP",
+      "description": "PE1 aprende Internet vía PE3"
+    },
+    {
+      "type": "bgp-established",
+      "node": "pe3",
+      "peer": "192.0.2.2",
+      "description": "eBGP PE3 ↔ tránsito"
+    }
+  ],
+  "lesson": {
+    "title": "MPLS L3VPN multivendor: IS-IS + LDP + RR + VRFs + política de tránsito (solo Cisco IOL)",
+    "intro": "ISP AS65000 todo en Cisco IOL (no necesita KVM): núcleo, PEs y route reflector. Dos clientes VPN (A y B, con direccionamiento solapado) y un tránsito. Pulsa «Cargar configs» y recorre la red capa a capa.",
+    "steps": [
+      {
+        "title": "IGP: IS-IS en el núcleo",
+        "text": "Todo empieza por el IGP: da alcance a las loopbacks, que son los next-hops de BGP y los extremos de los LSP.",
+        "cmds": [
+          {
+            "node": "p1",
+            "lines": [
+              "show isis neighbors",
+              "show ip route isis"
+            ]
+          },
+          {
+            "node": "pe1",
+            "lines": [
+              "show isis neighbors",
+              "show ip route isis"
+            ]
+          }
+        ],
+        "observe": "P1 tiene adyacencia L2 con P2, PE1, PE2 y RR1. PE1 ve las loopbacks 10.255.0.x/32 por IS-IS.",
+        "result": "El IGP converge entre Cisco y Juniper: mismo NET, nivel 2, métricas wide y punto a punto.",
+        "check": [
+          {
+            "type": "isis-up",
+            "node": "p1",
+            "minAdjacencies": 4,
+            "description": "P1 con 4 adyacencias IS-IS"
+          },
+          {
+            "type": "route-present",
+            "node": "pe1",
+            "prefix": "10.255.0.13/32",
+            "protocol": "IS-IS",
+            "description": "PE1 llega a la loopback de PE3"
+          }
+        ]
+      },
+      {
+        "title": "MPLS: sesiones LDP y etiquetas",
+        "text": "LDP reparte etiquetas para cada loopback: así se construyen los LSP entre PEs.",
+        "cmds": [
+          {
+            "node": "p1",
+            "lines": [
+              "show mpls ldp neighbor",
+              "show mpls forwarding-table"
+            ]
+          },
+          {
+            "node": "pe1",
+            "lines": [
+              "show mpls ldp neighbor",
+              "show mpls forwarding-table"
+            ]
+          }
+        ],
+        "observe": "P1 tiene sesiones LDP Oper con P2, PE1 y PE2. En PE1, la LFIB contiene las loopbacks de los otros PEs: son los LSP que usará la VPN.",
+        "result": "Hay LSP extremo a extremo. Fíjate en que RR1 no tiene LDP: no está en el camino de los datos.",
+        "check": [
+          {
+            "type": "ldp-up",
+            "node": "p1",
+            "minSessions": 3,
+            "description": "P1 con 3 sesiones LDP"
+          },
+          {
+            "type": "ldp-up",
+            "node": "pe1",
+            "minSessions": 2,
+            "description": "PE1 con LDP hacia P1 y P2"
+          }
+        ]
+      },
+      {
+        "title": "BGP: route reflector",
+        "text": "Los PEs no hacen full-mesh: todos hablan iBGP (IPv4 + VPNv4) solo con RR1.",
+        "cmds": [
+          {
+            "node": "rr1",
+            "lines": [
+              "show bgp all summary"
+            ]
+          },
+          {
+            "node": "pe1",
+            "lines": [
+              "show bgp all summary"
+            ]
+          }
+        ],
+        "observe": "RR1 (Cisco) tiene 3 clientes Established en IPv4 y VPNv4; PE1 los ve con familias inet e inet-vpn. Los P no tienen BGP (núcleo BGP-free).",
+        "result": "El RR refleja rutas sin estar en el camino de los datos (ni siquiera tiene LDP).",
+        "check": [
+          {
+            "type": "bgp-established",
+            "node": "rr1",
+            "peer": "10.255.0.11",
+            "description": "RR1 ↔ PE1"
+          },
+          {
+            "type": "bgp-established",
+            "node": "rr1",
+            "peer": "10.255.0.12",
+            "description": "RR1 ↔ PE2"
+          },
+          {
+            "type": "bgp-established",
+            "node": "rr1",
+            "peer": "10.255.0.13",
+            "description": "RR1 ↔ PE3"
+          }
+        ]
+      },
+      {
+        "title": "L3VPN: el cliente A se ve entre sedes",
+        "text": "CE-A1 (en PE1) y CE-A2 (en PE2, Cisco) intercambian prefijos a través del núcleo MPLS.",
+        "cmds": [
+          {
+            "node": "pe2",
+            "lines": [
+              "show bgp vpnv4 unicast all",
+              "show ip route vrf CUST-A"
+            ]
+          },
+          {
+            "node": "pe1",
+            "lines": [
+              "show ip route vrf CUST-A",
+              "show bgp vpnv4 unicast vrf CUST-A 192.168.20.0/24"
+            ]
+          }
+        ],
+        "observe": "En PE1 la ruta 192.168.20.0/24 llega por BGP con dos etiquetas: la VPN (interna) y la de LDP hacia PE2 (externa). En PE2, 192.168.10.0/24 aparece en la VRF CUST-A.",
+        "result": "VPNv4 + route-targets + LSP = L3VPN sobre IOS.",
+        "check": [
+          {
+            "type": "route-present",
+            "node": "pe1",
+            "vrf": "CUST-A",
+            "prefix": "192.168.20.0/24",
+            "protocol": "BGP",
+            "description": "PE1 aprende la sede A2"
+          },
+          {
+            "type": "route-present",
+            "node": "pe2",
+            "vrf": "CUST-A",
+            "prefix": "192.168.10.0/24",
+            "protocol": "BGP",
+            "description": "PE2 aprende la sede A1"
+          }
+        ]
+      },
+      {
+        "title": "Separación de VRFs con direcciones solapadas",
+        "text": "CE-B1 anuncia 192.168.10.0/24, igual que CE-A1. Cada VRF tiene su propia tabla.",
+        "cmds": [
+          {
+            "node": "pe2",
+            "lines": [
+              "show ip route vrf CUST-A 192.168.10.0",
+              "show ip route vrf CUST-B 192.168.10.0"
+            ]
+          },
+          {
+            "node": "pe3",
+            "lines": [
+              "show ip route vrf CUST-B"
+            ]
+          }
+        ],
+        "observe": "En PE2, 192.168.10.0/24 en CUST-A apunta a PE1 (BGP) y en CUST-B a CE-B1 (directo). PE3 ve las dos redes del cliente B.",
+        "result": "El RD hace únicas las rutas en VPNv4 y el RT decide en qué VRF se importan.",
+        "check": [
+          {
+            "type": "route-present",
+            "node": "pe3",
+            "vrf": "CUST-B",
+            "prefix": "192.168.10.0/24",
+            "protocol": "BGP",
+            "description": "PE3 ve la red de CE-B1 en CUST-B"
+          },
+          {
+            "type": "route-present",
+            "node": "pe2",
+            "vrf": "CUST-B",
+            "prefix": "192.168.30.0/24",
+            "protocol": "BGP",
+            "description": "PE2 ve la red de CE-B2 en CUST-B"
+          }
+        ]
+      },
+      {
+        "title": "Internet: tránsito y política de entrada",
+        "text": "PE3 recibe Internet del tránsito AS65100. La route-map UPSTREAM-IN pone local-preference 120 y la comunidad 65000:100.",
+        "cmds": [
+          {
+            "node": "pe3",
+            "lines": [
+              "show bgp ipv4 unicast 198.18.0.0/15",
+              "show bgp ipv4 unicast neighbors 192.0.2.2 advertised-routes"
+            ]
+          },
+          {
+            "node": "pe1",
+            "lines": [
+              "show bgp ipv4 unicast 198.18.0.0/15"
+            ]
+          }
+        ],
+        "observe": "En PE1 la ruta trae Localpref 120, Communities 65000:100 y Protocol next hop 10.255.0.13 (next-hop-self de PE3). Hacia el tránsito solo sale 198.51.100.0/24.",
+        "result": "La política se aplica una vez en el borde y viaja con la ruta (local-pref y comunidad) por todo el AS.",
+        "check": [
+          {
+            "type": "route-present",
+            "node": "pe1",
+            "prefix": "198.18.0.0/15",
+            "protocol": "BGP",
+            "description": "PE1 aprende Internet vía PE3"
+          },
+          {
+            "type": "bgp-established",
+            "node": "pe3",
+            "peer": "192.0.2.2",
+            "description": "eBGP PE3 ↔ tránsito"
+          }
+        ]
+      },
+      {
+        "title": "Reto: filtra un prefijo del tránsito",
+        "text": "Deja de aceptar 203.0.113.0/24 desde el tránsito con un prefix-list en la route-map de entrada.",
+        "cmds": [
+          {
+            "node": "pe3",
+            "lines": [
+              "configure terminal",
+              "ip prefix-list BLOQUEO seq 5 permit 203.0.113.0/24",
+              "route-map UPSTREAM-IN deny 5",
+              " match ip address prefix-list BLOQUEO",
+              "end",
+              "clear ip bgp 192.0.2.2 soft in",
+              "show bgp ipv4 unicast 203.0.113.0/24"
+            ]
+          },
+          {
+            "node": "pe1",
+            "lines": [
+              "show ip route 203.0.113.0"
+            ]
+          }
+        ],
+        "observe": "Tras el soft-reset, PE3 ya no instala 203.0.113.0/24 y la retirada se propaga por el RR hasta PE1.",
+        "result": "Un deny con match antes del permit filtra el prefijo, y el soft-reset aplica la política sin tirar la sesión.",
+        "check": [
+          {
+            "type": "route-absent",
+            "node": "pe1",
+            "prefix": "203.0.113.0/24",
+            "description": "PE1 ya no tiene 203.0.113.0/24"
+          },
+          {
+            "type": "route-present",
+            "node": "pe1",
+            "prefix": "198.18.0.0/15",
+            "protocol": "BGP",
+            "description": "El resto de Internet sigue"
+          }
+        ]
+      },
+      {
+        "title": "Failover del núcleo",
+        "text": "Corta el enlace pe1-p1 en el canvas. IS-IS y LDP reconvergen por P2 y la VPN sigue funcionando. Luego restáuralo.",
+        "cmds": [
+          {
+            "node": "pe1",
+            "lines": [
+              "show isis neighbors",
+              "show mpls forwarding-table",
+              "show bgp vpnv4 unicast vrf CUST-A 192.168.20.0/24"
+            ]
+          }
+        ],
+        "observe": "Con el enlace caído, el LSP de PE1 hacia PE2 sale por Ethernet0/2 (P2) y la ruta de la VPN no desaparece.",
+        "result": "La VPN depende del LSP, no de un enlace concreto: el IGP y LDP reconstruyen el camino.",
+        "seen": [
+          {
+            "type": "link-state",
+            "link": "pe1-p1",
+            "state": "down",
+            "description": "enlace pe1-p1 cortado"
+          },
+          {
+            "type": "route-present",
+            "node": "pe1",
+            "vrf": "CUST-A",
+            "prefix": "192.168.20.0/24",
+            "protocol": "BGP",
+            "description": "la VPN sigue durante el corte"
+          }
+        ],
+        "check": [
+          {
+            "type": "link-state",
+            "link": "pe1-p1",
+            "state": "up",
+            "description": "enlace restaurado"
+          },
+          {
+            "type": "ldp-up",
+            "node": "pe1",
+            "minSessions": 2,
+            "description": "LDP de nuevo con P1 y P2"
+          }
+        ]
+      }
+    ]
+  }
+}
