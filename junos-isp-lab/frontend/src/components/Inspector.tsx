@@ -8,6 +8,7 @@ const VIEWS = [
   { id: "bgp", label: "BGP" },
   { id: "ospf", label: "OSPF" },
   { id: "isis", label: "IS-IS" },
+  { id: "ldp", label: "LDP" },
   { id: "routes", label: "Rutas" },
   { id: "interfaces", label: "Interfaces" },
 ] as const;
@@ -18,7 +19,7 @@ function Table({ rows }: { rows: Rows }) {
   const cell = (v: unknown) => (v === true ? "✔" : v === false ? "" : String(v ?? ""));
   const cls = (v: unknown) => {
     const s = String(v);
-    if (/^(Established|Full|Up|up)$/.test(s)) return "ok";
+    if (/^(Established|Full|Up|up|Operational)$/.test(s)) return "ok";
     if (/^(Active|Connect|Idle|OpenSent|OpenConfirm|Init|ExStart|down|Down)$/.test(s)) return "bad";
     return "";
   };
@@ -39,16 +40,23 @@ function NodeInspector({ lab, node, catalog, running, onChange }: { lab: string;
   const [err, setErr] = useState("");
   const [cfg, setCfg] = useState("");
   const [cfgMsg, setCfgMsg] = useState("");
-  const [cmd, setCmd] = useState("show route protocol bgp");
+  const [cmd, setCmd] = useState("show bgp summary");
+  const [vrf, setVrf] = useState("");
   const [out, setOut] = useState("");
   const os = catalog[node.kind]?.os;
 
   const load = async () => {
     setErr("");
-    try { setRows((await api.view<Rows[number]>(lab, node.id, view)).rows); }
+    try { setRows((await api.view<Rows[number]>(lab, node.id, view, view === "routes" ? vrf : undefined)).rows); }
     catch (e) { setErr((e as Error).message); setRows([]); }
   };
-  useEffect(() => { if (tab === "estado" && running && os === "junos") load(); }, [tab, view, node.id, running]); // eslint-disable-line
+  const structured = os === "junos" || os === "ios";
+  useEffect(() => { if (tab === "estado" && running && structured) load(); }, [tab, view, node.id, running]); // eslint-disable-line
+  const chips = os === "ios"
+    ? ["show bgp all summary", "show ip route", "show mpls ldp neighbor", "show mpls forwarding-table", "show bgp vpnv4 unicast all", "show ip route vrf CUST-A", "show isis neighbors"]
+    : os === "junos"
+      ? ["show bgp summary", "show route protocol bgp", "show ldp session", "show route table inet.3", "show route table CUST-A.inet.0", "show isis adjacency", "show route 198.18.0.0/15 detail"]
+      : ["show bgp summary", "show ip route", "show bgp ipv4 unicast"];
   useEffect(() => { if (tab === "config") api.getConfig(lab, node.id).then(setCfg).catch(() => setCfg("")); }, [tab, node.id, lab]);
 
   return (
@@ -64,10 +72,11 @@ function NodeInspector({ lab, node, catalog, running, onChange }: { lab: string;
 
       {tab === "estado" && (
         !running ? <p className="muted">Despliega el lab para ver tablas en vivo.</p> :
-        os !== "junos" ? <p className="muted">Nodo no-Junos: usa la pestaña Comando (salida en bruto).</p> : (
+        !structured ? <p className="muted">Nodo {os}: usa la pestaña Comando (salida en bruto).</p> : (
           <>
             <div className="tabs small">
               {VIEWS.map((v) => <button key={v.id} className={view === v.id ? "active" : ""} onClick={() => setView(v.id)}>{v.label}</button>)}
+              {view === "routes" && <input className="mono" style={{ width: 90 }} placeholder="VRF" value={vrf} onChange={(e) => setVrf(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} />}
               <button onClick={load} title="Refrescar">⟳</button>
             </div>
             {err ? <pre className="error">{err}</pre> : <Table rows={rows} />}
@@ -77,7 +86,10 @@ function NodeInspector({ lab, node, catalog, running, onChange }: { lab: string;
 
       {tab === "config" && (
         <>
-          <p className="muted">Configuración en formato <code>set</code>. «Aplicar» la empuja por consola (configure → load set terminal → commit).</p>
+          <p className="muted">{os === "ios"
+            ? <>Configuración IOS. «Aplicar» la empuja por consola (configure terminal → líneas → end → write memory).</>
+            : os === "frr" ? <>Configuración FRR (frr.conf): se carga al desplegar el lab.</>
+            : <>Configuración en formato <code>set</code>. «Aplicar» la empuja por consola (configure → load set terminal → commit).</>}</p>
           <textarea className="code" value={cfg} onChange={(e) => setCfg(e.target.value)} spellCheck={false} />
           <div className="row">
             <button onClick={async () => { await api.putConfig(lab, node.id, cfg); setCfgMsg("Guardada"); }}>Guardar</button>
@@ -103,7 +115,7 @@ function NodeInspector({ lab, node, catalog, running, onChange }: { lab: string;
             <button disabled={!running}>Ejecutar</button>
           </form>
           <div className="chips">
-            {["show bgp summary", "show route protocol bgp", "show ospf neighbor", "show route 198.51.100.0/24 detail", "show route advertising-protocol bgp 192.0.2.2", "show bgp neighbor | match \"State|Peer\""].map((c) =>
+            {chips.map((c) =>
               <button key={c} className="chip" onClick={() => setCmd(c)}>{c}</button>)}
           </div>
           <pre className="output">{out}</pre>

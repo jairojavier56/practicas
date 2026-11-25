@@ -10,6 +10,41 @@ Simulador visual open-source tipo *Packet Tracer* para practicar **enrutamiento 
 - **Labs guiados** con validación automática.
 - **Motor**: [Containerlab](https://containerlab.dev) (Apache-2.0) + tus imágenes Juniper. Hay también un **driver mock** (CLI simulado) para desarrollar la UI sin imágenes.
 
+## Instalación rápida (recomendada): Cisco IOL + Juniper cRPD
+
+Con IOL y cRPD los routers son **IOS y Junos reales en contenedores**: unos 0.5–1 GB cada uno, arrancan en segundos y **no necesitan virtualización anidada ni ISO**. Con 32 GB de RAM caben 30–50 routers, lo justo para topologías largas con MPLS, BGP y políticas.
+
+En Ubuntu 22.04/24.04 (PC, VM o **WSL2 en Windows**):
+
+```bash
+git clone -b claude/practical-mendel-82nfq2 https://github.com/jairojavier56/practicas.git
+```
+
+```bash
+cd practicas/junos-isp-lab && sudo ./install.sh
+```
+
+Después, importa tus imágenes (desde tu PNETLab):
+
+```bash
+sudo lab-import-image /ruta/x86_64_crb_linux-adventerprisek9-ms.iol --version 17.12.01
+```
+
+```bash
+sudo lab-import-image /ruta/junos-routing-crpd-docker-24.2R1.14.tgz
+```
+
+Abre `http://localhost:8080` y carga el laboratorio guiado **mpls-l3vpn**: 11 nodos (unos 6 GB) con núcleo Cisco IOL, PEs y RR Juniper cRPD, IS-IS, LDP, route reflector, L3VPN con VRFs solapadas y un tránsito con políticas. Trae 8 pasos de lección con validación automática.
+
+| Imagen | Cómo la importa `lab-import-image` | Notas |
+|---|---|---|
+| IOL 17.x `x86_64_crb_linux-*.iol` | vrnetlab `cisco/iol` → `cisco_iol-<versión>.bin` | Recomendada. Usa `--version` si el nombre no la trae |
+| IOL antiguo `i86bi-linux-l3-*.bin` | igual | 32 bits / 15.x: puede no estar soportado por vrnetlab |
+| cRPD `junos-routing-crpd-docker-*.tgz` | `docker load` | MPLS: `install.sh` carga `mpls_router` y `mpls_iptunnel` |
+| vJunos (`.qcow2` o `.tgz` de PNETLab) | vrnetlab | Necesita KVM: úsalo para 1–2 routers, no para el lab grande |
+
+Interfaces: IOL usa `Ethernet0/1…0/3, 1/0…` (Ethernet0/0 es la gestión). cRPD y FRR usan `eth1, eth2…`. Las marcas `VERIFICAR` de `config/images.example.yaml` indican qué comprobar la primera vez.
+
 ---
 
 ## 0. Tres formas de usarlo

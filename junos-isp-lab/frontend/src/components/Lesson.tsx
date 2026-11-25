@@ -71,7 +71,7 @@ export function Lesson({ lab, topo, running, openTerminal, proto, events }: {
     }
   };
 
-  const stateCls = (s: string) => (/^(Established|Full)$/.test(s) ? "ok" : /^(Active|Idle|Connect|Down)$/.test(s) ? "bad" : "warn");
+  const stateCls = (s: string) => (/^(Established|Full|Up|Operational)$/.test(s) ? "ok" : /^(Active|Idle|Connect|Down)$/.test(s) ? "bad" : "warn");
 
   return (
     <div className="lesson">
@@ -115,7 +115,7 @@ export function Lesson({ lab, topo, running, openTerminal, proto, events }: {
 
       <h4>Estado en vivo <small className="muted">(consultado a los routers)</small></h4>
       <div className="live">
-        {proto.ospf.map((o, i) => <div key={"o" + i} className={stateCls(o.state)}><span className="dot" />OSPF {o.node} {o.iface} → {o.neighbor}<span className="st">{o.state}</span></div>)}
+        {proto.ospf.map((o, i) => <div key={"o" + i} className={stateCls(o.state)}><span className="dot" />{o.proto ?? "OSPF"} {o.node} {o.iface} → {o.neighbor}<span className="st">{o.state}</span></div>)}
         {proto.bgp.map((b, i) => <div key={"b" + i} className={stateCls(b.state)}><span className="dot" />BGP {b.node} → {b.peer} (AS{b.asn})<span className="st">{b.state}</span></div>)}
         {!proto.bgp.length && !proto.ospf.length && <p className="muted">Sin datos todavía.</p>}
       </div>

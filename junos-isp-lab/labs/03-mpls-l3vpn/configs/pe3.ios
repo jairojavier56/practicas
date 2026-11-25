@@ -1,0 +1,76 @@
+! ===== pe3 (Cisco IOL, AS65000) — generado para el lab MPLS L3VPN =====
+hostname pe3
+ip bgp-community new-format
+vrf definition CUST-B
+ rd 65000:20013
+ address-family ipv4
+  route-target export 65000:200
+  route-target import 65000:200
+ exit-address-family
+interface Loopback0
+ ip address 10.255.0.13 255.255.255.255
+ ip router isis CORE
+interface Ethernet0/1
+ description -> p2
+ ip address 10.1.5.1 255.255.255.252
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+interface Ethernet0/2
+ description -> pe2
+ ip address 10.1.6.2 255.255.255.252
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+interface Ethernet0/3
+ description -> ce-b2
+ vrf forwarding CUST-B
+ ip address 172.17.2.1 255.255.255.252
+ no shutdown
+interface Ethernet1/0
+ description -> upstream
+ ip address 192.0.2.1 255.255.255.252
+ no shutdown
+router isis CORE
+ net 49.0001.0102.5500.0013.00
+ is-type level-2-only
+ metric-style wide
+ passive-interface Loopback0
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+router bgp 65000
+ bgp router-id 10.255.0.13
+ bgp log-neighbor-changes
+ neighbor 192.0.2.2 remote-as 65100
+ no bgp default ipv4-unicast
+ neighbor 10.255.0.100 remote-as 65000
+ neighbor 10.255.0.100 update-source Loopback0
+ address-family ipv4
+  neighbor 10.255.0.100 activate
+  neighbor 10.255.0.100 next-hop-self
+  neighbor 10.255.0.100 send-community both
+  neighbor 192.0.2.2 activate
+  neighbor 192.0.2.2 route-map UPSTREAM-IN in
+  neighbor 192.0.2.2 route-map UPSTREAM-OUT out
+  network 198.51.100.0 mask 255.255.255.0
+ exit-address-family
+ address-family vpnv4
+  neighbor 10.255.0.100 activate
+  neighbor 10.255.0.100 send-community extended
+ exit-address-family
+ address-family ipv4 vrf CUST-B
+  neighbor 172.17.2.2 remote-as 65512
+  neighbor 172.17.2.2 activate
+ exit-address-family
+ip route 198.51.100.0 255.255.255.0 Null0
+! Política de entrada del tránsito: marca y prefiere sus rutas
+route-map UPSTREAM-IN permit 10
+ set local-preference 120
+ set community 65000:100
+! Política de salida: anuncia SOLO el agregado del ISP
+ip prefix-list ISP-AGG seq 10 permit 198.51.100.0/24
+route-map UPSTREAM-OUT permit 10
+ match ip address prefix-list ISP-AGG
+end

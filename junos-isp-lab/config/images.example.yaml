@@ -37,8 +37,40 @@ kinds:
     # a escala. Si tienes uno, móntalo así (ruta en TU host):
     # clabExtra:
     #   license: "<<RUTA_A_TU_LICENCIA_CRPD>>"
+    # MPLS en cRPD: el reenvío lo hace el kernel Linux. El host necesita los módulos
+    # mpls_router y mpls_iptunnel (install.sh los carga) y cada contenedor activa
+    # MPLS en sus interfaces al arrancar:
+    clabExtra:
+      exec:
+        - "sysctl -w net.mpls.platform_labels=1048575"
+        - "sh -c 'for i in /proc/sys/net/mpls/conf/eth*/input; do echo 1 > $i; done'"
     console: { command: ["docker", "exec", "-it", "{container}", "cli"] }
     exec:    { command: ["docker", "exec", "{container}", "cli", "-c", "{cmd}"] }
+    linkControl: true
+    icon: router
+
+  # --- Cisco IOL (IOS on Linux): IOS real en un contenedor, ~0.5 GB y arranca en
+  # segundos. Ideal para topologías grandes: OSPF, IS-IS, BGP, MPLS LDP, L3VPN...
+  # Se construye con vrnetlab (cisco/iol). Recomendado IOL 17.x (x86_64, de CML).
+  cisco-iol:
+    label: "Cisco IOL (IOS)"
+    os: ios
+    clabKind: cisco_iol
+    image: "<<TU_IMAGEN_IOL>>"             # ej: vrnetlab/cisco_iol:17.12.01
+    resources: { ramMB: 768, vcpu: 0.5 }
+    bootTimeSec: 30
+    interfaces:
+      count: 11
+      # Ethernet0/0 es la gestión; los puertos de datos van por slots de 4.
+      # VERIFICAR: eth1 → Ethernet0/1, eth2 → Ethernet0/2, eth3 → Ethernet0/3, eth4 → Ethernet1/0...
+      names: [Ethernet0/1, Ethernet0/2, Ethernet0/3, Ethernet1/0, Ethernet1/1, Ethernet1/2, Ethernet1/3, Ethernet2/0, Ethernet2/1, Ethernet2/2, Ethernet2/3]
+      clabPattern: "eth{n+1}"
+    console:
+      command: ["sshpass", "-e", "ssh", "-tt", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "${IOS_USER}@{container}"]
+      env: { SSHPASS: "$IOS_PASSWORD" }
+    exec:
+      command: ["sshpass", "-e", "ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "${IOS_USER}@{container}", "{cmd}"]
+      env: { SSHPASS: "$IOS_PASSWORD" }
     linkControl: true
     icon: router
 

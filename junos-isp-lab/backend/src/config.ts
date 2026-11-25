@@ -16,14 +16,16 @@ const CommandSpec = z.object({
 
 const KindSpec = z.object({
   label: z.string(),
-  os: z.enum(["junos", "frr", "linux"]).default("junos"),
+  os: z.enum(["junos", "ios", "frr", "linux"]).default("junos"),
   clabKind: z.string(),
   image: z.string(),
   resources: z.object({ ramMB: z.number(), vcpu: z.number() }),
   interfaces: z.object({
     count: z.number().int().positive(),
     // Nombre que ve el usuario / Junos. {n} = índice desde 0. Admite {n+K}.
-    junosPattern: z.string(),
+    junosPattern: z.string().optional(),
+    // Alternativa al patrón: lista explícita (p. ej. IOL: Ethernet0/1, 0/2, 0/3, 1/0...)
+    names: z.array(z.string()).optional(),
     // Nombre del endpoint en el fichero de containerlab.
     clabPattern: z.string(),
   }),
@@ -82,7 +84,9 @@ export function renderIface(pattern: string, n: number): string {
 }
 
 export function ifaceList(kind: KindSpec): string[] {
-  return Array.from({ length: kind.interfaces.count }, (_, n) => renderIface(kind.interfaces.junosPattern, n));
+  const { names, junosPattern, count } = kind.interfaces;
+  if (names?.length) return names.slice(0, count);
+  return Array.from({ length: count }, (_, n) => renderIface(junosPattern ?? "eth{n+1}", n));
 }
 
 /** Traduce el nombre Junos (ge-0/0/2) al endpoint de containerlab (eth3). */

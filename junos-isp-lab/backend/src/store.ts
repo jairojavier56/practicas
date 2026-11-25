@@ -55,16 +55,18 @@ export function saveTopology(t: unknown): Topology {
   return topo;
 }
 
-// ---- configs por nodo (formato `set`) ----
-export function readNodeConfig(lab: string, node: string): string | null {
-  const f = path.join(cfgDir(lab), `${node}.set`);
+// ---- configs por nodo: <node>.set (Junos), <node>.ios (Cisco), <node>.frr.conf (FRR) ----
+export const CONFIG_EXT: Record<string, string> = { junos: "set", ios: "ios", frr: "frr.conf", linux: "sh" };
+
+export function readNodeConfig(lab: string, node: string, os = "junos"): string | null {
+  const f = path.join(cfgDir(lab), `${node}.${CONFIG_EXT[os] ?? "set"}`);
   return existsSync(f) ? readFileSync(f, "utf8") : null;
 }
 
-export function writeNodeConfig(lab: string, node: string, text: string) {
+export function writeNodeConfig(lab: string, node: string, text: string, os = "junos") {
   if (!SAFE_NAME.test(lab) || !SAFE_NAME.test(node)) throw new Error("nombre inválido");
   mkdirSync(cfgDir(lab), { recursive: true });
-  writeFileSync(path.join(cfgDir(lab), `${node}.set`), text);
+  writeFileSync(path.join(cfgDir(lab), `${node}.${CONFIG_EXT[os] ?? "set"}`), text);
 }
 
 // ---- plantillas de laboratorios guiados (labs/<dir>/lab.json + configs/*.set) ----

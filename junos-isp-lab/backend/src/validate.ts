@@ -1,51 +1,68 @@
 import type { NetworkDriver } from "./drivers/driver.js";
 import type { Check, Topology } from "./types.js";
-import { VIEWS, safeJson, type BgpPeerRow, type OspfNbrRow, type IsisAdjRow, type RouteRow } from "./junos/parse.js";
+import type { BgpPeerRow, OspfNbrRow, IsisAdjRow, LdpRow, RouteRow } from "./junos/parse.js";
+import { viewsFor, type ViewName, type ViewOpts } from "./views.js";
 
 export interface CheckResult { check: Check; ok: boolean; detail: string }
 
-async function view<T>(driver: NetworkDriver, topo: Topology, node: string, v: keyof typeof VIEWS, extra = ""): Promise<T[]> {
-  const spec = VIEWS[v];
-  const cmd = extra ? spec.cmd.replace(" | display json", ` ${extra} | display json`) : spec.cmd;
-  return spec.parse(safeJson(await driver.exec(topo, node, cmd))) as T[];
+/** Ejecuta una vista (bgp, ospf, rutas…) en un nodo, con el comando de su sistema operativo. */
+export async function nodeView<T>(driver: NetworkDriver, topo: Topology, osOf: (node: string) => string, node: string, v: ViewName, o: ViewOpts = {}): Promise<T[]> {
+  const views = viewsFor(osOf(node));
+  if (!views) throw new Error(`el nodo ${node} no es Junos ni IOS: usa la pestaña Comando`);
+  const raw = await driver.exec(topo, node, views[v].cmd(o));
+  return views[v].parse(raw, o) as T[];
 }
 
-/** Ejecuta las validaciones del lab guiado contra los equipos (reales o mock). */
-export async function runChecks(driver: NetworkDriver, topo: Topology, checks: Check[] = topo.checks ?? []): Promise<CheckResult[]> {
+const sameProto = (a: string, b?: string) => !b || a.toLowerCase().replace("-", "") === b.toLowerCase().replace("-", "");
+
+/** Ejecuta comprobaciones contra los equipos (reales o mock), Junos o IOS. */
+export async function runChecks(driver: NetworkDriver, topo: Topology, osOf: (node: string) => string, checks: Check[] = topo.checks ?? []): Promise<CheckResult[]> {
   const out: CheckResult[] = [];
   let links: Awaited<ReturnType<NetworkDriver["linkStates"]>> | undefined;
+  const v = <T,>(node: string, name: ViewName, o: ViewOpts = {}) => nodeView<T>(driver, topo, osOf, node, name, o);
+  const route = async (node: string, prefix: string, vrf?: string) =>
+    (await v<RouteRow>(node, "routes", { vrf })).filter((x) => x.prefix === prefix && x.active);
+
   for (const c of checks) {
     try {
       switch (c.type) {
         case "bgp-established": {
-          const p = (await view<BgpPeerRow>(driver, topo, c.node, "bgp")).find((x) => x.peer === c.peer);
+          const p = (await v<BgpPeerRow>(c.node, "bgp")).find((x) => x.peer === c.peer);
           out.push({ check: c, ok: p?.state === "Established", detail: p ? `estado ${p.state}` : "vecino no configurado" });
           break;
         }
         case "ospf-full": {
-          const n = (await view<OspfNbrRow>(driver, topo, c.node, "ospf")).filter((x) => x.state === "Full").length;
+          const n = (await v<OspfNbrRow>(c.node, "ospf")).filter((x) => x.state === "Full").length;
           out.push({ check: c, ok: n >= c.minNeighbors, detail: `${n} vecinos Full` });
           break;
         }
         case "isis-up": {
-          const n = (await view<IsisAdjRow>(driver, topo, c.node, "isis")).filter((x) => x.state === "Up").length;
+          const n = (await v<IsisAdjRow>(c.node, "isis")).filter((x) => x.state === "Up").length;
           out.push({ check: c, ok: n >= c.minAdjacencies, detail: `${n} adyacencias Up` });
           break;
         }
+        case "ldp-up": {
+          const n = (await v<LdpRow>(c.node, "ldp")).filter((x) => x.state === "Operational").length;
+          out.push({ check: c, ok: n >= c.minSessions, detail: `${n} sesiones LDP operativas` });
+          break;
+        }
         case "route-present": {
-          const rs = (await view<RouteRow>(driver, topo, c.node, "routes", `${c.prefix} exact`))
-            .filter((r) => r.prefix === c.prefix && r.active && (!c.protocol || r.protocol.toLowerCase() === c.protocol.toLowerCase()));
-          out.push({ check: c, ok: rs.length > 0, detail: rs[0] ? `${rs[0].protocol} via ${rs[0].nextHop ?? rs[0].via ?? "-"}` : "no está en inet.0 (activa)" });
+          const rs = (await route(c.node, c.prefix, c.vrf)).filter((r) => sameProto(r.protocol, c.protocol));
+          out.push({ check: c, ok: rs.length > 0, detail: rs[0] ? `${rs[0].protocol} via ${rs[0].nextHop ?? rs[0].via ?? "-"}` : `no está en ${c.vrf ?? "la tabla global"}` });
+          break;
+        }
+        case "route-absent": {
+          const rs = await route(c.node, c.prefix, c.vrf);
+          out.push({ check: c, ok: rs.length === 0, detail: rs.length ? `sigue presente (${rs[0].protocol})` : "ya no está" });
           break;
         }
         case "route-aspath": {
-          const r = (await view<RouteRow>(driver, topo, c.node, "routes", `${c.prefix} exact`)).find((x) => x.prefix === c.prefix && x.active);
-          out.push({ check: c, ok: !!r?.asPath?.includes(c.contains), detail: r ? `AS path: ${r.asPath ?? "(vacío)"}` : "ruta no encontrada" });
+          const r = (await route(c.node, c.prefix, c.vrf))[0];
+          out.push({ check: c, ok: !!r?.asPath?.includes(c.contains), detail: r ? `AS path: ${r.asPath ?? "(n/d en IOS: usa show bgp)"}` : "ruta no encontrada" });
           break;
         }
         case "route-via": {
-          // Interfaz de salida de la ruta activa (vale igual para eBGP directo que para iBGP resuelto por IGP)
-          const r = (await view<RouteRow>(driver, topo, c.node, "routes", `${c.prefix} exact`)).find((x) => x.prefix === c.prefix && x.active);
+          const r = (await route(c.node, c.prefix, c.vrf))[0];
           out.push({ check: c, ok: r?.via === c.via, detail: r ? `sale por ${r.via ?? "-"} (${r.protocol})` : "ruta no encontrada" });
           break;
         }

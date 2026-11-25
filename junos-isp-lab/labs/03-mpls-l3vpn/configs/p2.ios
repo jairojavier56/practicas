@@ -1,0 +1,35 @@
+! ===== p2 (Cisco IOL, AS65000) — generado para el lab MPLS L3VPN =====
+hostname p2
+ip bgp-community new-format
+interface Loopback0
+ ip address 10.255.0.2 255.255.255.255
+ ip router isis CORE
+interface Ethernet0/1
+ description -> p1
+ ip address 10.1.1.2 255.255.255.252
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+interface Ethernet0/2
+ description -> pe1
+ ip address 10.1.3.2 255.255.255.252
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+interface Ethernet0/3
+ description -> pe3
+ ip address 10.1.5.2 255.255.255.252
+ ip router isis CORE
+ isis network point-to-point
+ mpls ip
+ no shutdown
+router isis CORE
+ net 49.0001.0102.5500.0002.00
+ is-type level-2-only
+ metric-style wide
+ passive-interface Loopback0
+mpls label protocol ldp
+mpls ldp router-id Loopback0 force
+end

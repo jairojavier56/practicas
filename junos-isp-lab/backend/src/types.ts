@@ -24,9 +24,11 @@ export type Check =
   | { type: "bgp-established"; node: string; peer: string; description?: string }
   | { type: "ospf-full"; node: string; minNeighbors: number; description?: string }
   | { type: "isis-up"; node: string; minAdjacencies: number; description?: string }
-  | { type: "route-present"; node: string; prefix: string; protocol?: string; description?: string }
-  | { type: "route-aspath"; node: string; prefix: string; contains: string; description?: string }
-  | { type: "route-via"; node: string; prefix: string; via: string; description?: string }
+  | { type: "ldp-up"; node: string; minSessions: number; description?: string }
+  | { type: "route-present"; node: string; prefix: string; protocol?: string; vrf?: string; description?: string }
+  | { type: "route-absent"; node: string; prefix: string; vrf?: string; description?: string }
+  | { type: "route-aspath"; node: string; prefix: string; contains: string; vrf?: string; description?: string }
+  | { type: "route-via"; node: string; prefix: string; via: string; vrf?: string; description?: string }
   | { type: "link-state"; link: string; state: "up" | "down"; node?: string; description?: string };
 
 /** Paso de una lección guiada (mismo formato que la lección interactiva del navegador). */
@@ -64,4 +66,4 @@ export type ServerEvent =
   | { type: "proto"; lab: string; bgp: ProtoBgp[]; ospf: ProtoOspf[] };
 
 export interface ProtoBgp { node: string; peer: string; asn: string; state: string }
-export interface ProtoOspf { node: string; iface: string; neighbor: string; state: string }
+export interface ProtoOspf { node: string; iface: string; neighbor: string; state: string; proto?: "OSPF" | "IS-IS" | "LDP" }

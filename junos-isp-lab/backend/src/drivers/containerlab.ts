@@ -10,6 +10,31 @@ import { env, renderCommand, toClabIface, type KindSpec } from "../config.js";
 
 const execFileP = promisify(execFile);
 
+const FRR_DAEMONS = `bgpd=yes
+ospfd=yes
+ospf6d=no
+ripd=no
+ripngd=no
+isisd=yes
+pimd=no
+ldpd=yes
+nhrpd=no
+eigrpd=no
+babeld=no
+sharpd=no
+pbrd=no
+bfdd=yes
+fabricd=no
+vrrpd=no
+vtysh_enable=yes
+zebra_options="  -A 127.0.0.1 -s 90000000"
+bgpd_options="   -A 127.0.0.1"
+ospfd_options="  -A 127.0.0.1"
+isisd_options="  -A 127.0.0.1"
+ldpd_options="   -A 127.0.0.1"
+bfdd_options="   -A 127.0.0.1"
+`;
+
 export const containerName = (lab: string, node: string) => `clab-${lab}-${node}`;
 export const labDir = (lab: string) => path.join(env.dataDir, lab);
 export const configDir = (lab: string) => path.join(labDir(lab), "configs");
@@ -82,6 +107,14 @@ export class ContainerlabDriver implements NetworkDriver {
 
   async deploy(topo: Topology, log: (l: string) => void) {
     mkdirSync(configDir(topo.name), { recursive: true });
+    // FRR monta su frr.conf y daemons desde configs/: si el nodo es nuevo, creamos unos por defecto
+    for (const n of topo.nodes) {
+      if (this.catalog[n.kind]?.os !== "frr") continue;
+      const conf = path.join(configDir(topo.name), `${n.id}.frr.conf`);
+      if (!existsSync(conf)) writeFileSync(conf, `frr defaults traditional\nhostname ${n.id}\nservice integrated-vtysh-config\n!\n`);
+      const daemons = path.join(configDir(topo.name), "daemons");
+      if (!existsSync(daemons)) writeFileSync(daemons, FRR_DAEMONS);
+    }
     const file = this.topoFile(topo);
     writeFileSync(file, toClabYaml(topo, this.catalog));
     log(`Topología containerlab generada en ${file}`);

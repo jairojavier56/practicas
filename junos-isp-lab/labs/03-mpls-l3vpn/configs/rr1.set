@@ -1,0 +1,25 @@
+# ===== rr1 (Juniper cRPD, AS65000) =====
+# VERIFICAR en tu versión de cRPD: las interfaces son las de Linux (ethX).
+set interfaces eth1 description "-> p1"
+set interfaces eth1 unit 0 family inet address 10.1.7.1/30
+set interfaces eth1 unit 0 family iso
+set interfaces eth1 unit 0 family mpls
+set interfaces lo0 unit 0 family inet address 10.255.0.100/32
+set interfaces lo0 unit 0 family iso address 49.0001.0102.5500.0100.00
+set routing-options router-id 10.255.0.100
+set routing-options autonomous-system 65000
+set protocols isis level 1 disable
+set protocols isis level 2 wide-metrics-only
+set protocols isis interface lo0.0 passive
+set protocols isis interface eth1 point-to-point
+# Route reflector: no está en el camino de los datos, no necesita MPLS/LDP.
+# Pero para reflejar VPNv4 necesita resolver next-hops sin inet.3:
+set routing-options resolution rib bgp.l3vpn.0 resolution-ribs inet.0
+set protocols bgp group CLIENTES type internal
+set protocols bgp group CLIENTES local-address 10.255.0.100
+set protocols bgp group CLIENTES cluster 10.255.0.100
+set protocols bgp group CLIENTES family inet unicast
+set protocols bgp group CLIENTES family inet-vpn unicast
+set protocols bgp group CLIENTES neighbor 10.255.0.11
+set protocols bgp group CLIENTES neighbor 10.255.0.12
+set protocols bgp group CLIENTES neighbor 10.255.0.13

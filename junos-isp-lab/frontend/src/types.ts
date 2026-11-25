@@ -6,13 +6,13 @@ export type Check = { type: string; node?: string; description?: string; [k: str
 export interface LessonStep { title: string; text: string; cmds: { node: string; lines: string[] }[]; observe: string; result: string; check: Check[]; seen?: Check[] }
 export interface Topology { name: string; description?: string; nodes: LabNode[]; links: LabLink[]; checks?: unknown[]; guide?: string[]; lesson?: { title: string; intro?: string; steps: LessonStep[] } }
 export interface ProtoBgp { node: string; peer: string; asn: string; state: string }
-export interface ProtoOspf { node: string; iface: string; neighbor: string; state: string }
+export interface ProtoOspf { node: string; iface: string; neighbor: string; state: string; proto?: string }
 export type LabStatus = "stopped" | "deploying" | "running" | "destroying" | "error";
 export type LinkStateValue = "up" | "down" | "unknown";
 
 export interface KindInfo {
   label: string;
-  os: "junos" | "frr" | "linux";
+  os: "junos" | "ios" | "frr" | "linux";
   icon: "router" | "switch" | "server" | "cloud";
   resources: { ramMB: number; vcpu: number };
   bootTimeSec: number;

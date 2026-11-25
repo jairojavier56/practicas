@@ -15,6 +15,20 @@ export interface BgpPeerRow {
   received?: string;
   accepted?: string;
   active?: string;
+  family?: string;
+}
+
+export interface LdpRow {
+  neighbor: string;
+  state: string; // "Operational" cuando la sesión está arriba
+}
+
+export function parseLdpSessions(json: J): LdpRow[] {
+  const info = arr(json, "ldp-session-information")[0];
+  return arr(info, "ldp-session").map((x) => ({
+    neighbor: d(x, "ldp-neighbor-address") ?? "",
+    state: d(x, "ldp-session-state") ?? "",
+  }));
 }
 
 export function parseBgpSummary(json: J): BgpPeerRow[] {
@@ -136,16 +150,6 @@ export function parseInterfacesTerse(json: J): IfaceRow[] {
   return rows;
 }
 
-/** Vistas del panel de inspección: comando Junos + parser. */
-export const VIEWS = {
-  bgp: { cmd: "show bgp summary | display json", parse: parseBgpSummary },
-  ospf: { cmd: "show ospf neighbor | display json", parse: parseOspfNeighbors },
-  isis: { cmd: "show isis adjacency | display json", parse: parseIsisAdjacency },
-  routes: { cmd: "show route | display json", parse: parseRoutes },
-  interfaces: { cmd: "show interfaces terse | display json", parse: parseInterfacesTerse },
-} as const;
-
-export type ViewName = keyof typeof VIEWS;
 
 /** Junos a veces antepone avisos al JSON: buscamos la primera llave. */
 export function safeJson(text: string): J {

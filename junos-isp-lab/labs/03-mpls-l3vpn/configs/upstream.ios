@@ -1,0 +1,23 @@
+! ===== upstream: proveedor de tránsito AS65100 (Cisco IOL) =====
+hostname upstream
+interface Loopback0
+ ip address 100.100.100.100 255.255.255.255
+interface Loopback1
+ description "Internet" simulada
+ ip address 198.18.0.1 255.254.0.0
+interface Loopback2
+ ip address 203.0.113.1 255.255.255.0
+interface Ethernet0/1
+ description -> pe3 (AS65000)
+ ip address 192.0.2.2 255.255.255.252
+ no shutdown
+router bgp 65100
+ bgp router-id 100.100.100.100
+ bgp log-neighbor-changes
+ neighbor 192.0.2.1 remote-as 65000
+ address-family ipv4
+  neighbor 192.0.2.1 activate
+  network 198.18.0.0 mask 255.254.0.0
+  network 203.0.113.0 mask 255.255.255.0
+ exit-address-family
+end

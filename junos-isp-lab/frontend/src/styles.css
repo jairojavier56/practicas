@@ -50,10 +50,11 @@ button.danger { color: var(--bad); border-color: var(--bad); }
 .canvas { grid-area: canvas; position: relative; min-height: 0; }
 .toast { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; max-width: 80%; cursor: pointer; z-index: 10; }
 
-.router-node { background: var(--panel); border: 2px solid; border-radius: 12px; padding: 6px 12px 8px; text-align: center; min-width: 110px; position: relative; }
+.router-node { background: var(--panel); border: 2px solid; border-radius: 10px; padding: 4px 10px 6px; text-align: center; min-width: 96px; position: relative; }
+.router-node svg { width: 34px; height: 23px; }
 .router-node.selected { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 40%, transparent); }
 .router-label { font-weight: 600; color: var(--fg); }
-.router-meta { font-size: 11px; color: var(--muted); }
+.router-meta { font-size: 10px; color: var(--muted); white-space: nowrap; }
 .router-node .dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .router-node .dot.on { background: var(--ok); }
 .router-node .handle { width: 9px; height: 9px; background: var(--accent); opacity: 0; }

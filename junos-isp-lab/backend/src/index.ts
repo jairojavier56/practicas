@@ -9,17 +9,20 @@ import { MockDriver } from "./drivers/mock.js";
 import { ContainerlabDriver } from "./drivers/containerlab.js";
 import type { NetworkDriver } from "./drivers/driver.js";
 import * as store from "./store.js";
-import { VIEWS, safeJson, type ViewName } from "./junos/parse.js";
 import { pushSetConfig } from "./junos/configpush.js";
-import { runChecks } from "./validate.js";
+import { pushIosConfig } from "./ios/configpush.js";
+import { runChecks, nodeView } from "./validate.js";
+import { VIEW_NAMES, viewsFor, type ViewName } from "./views.js";
 import type { Check, LabStatus, ProtoBgp, ProtoOspf, ServerEvent, Topology } from "./types.js";
-import type { BgpPeerRow, OspfNbrRow } from "./junos/parse.js";
+import type { BgpPeerRow, OspfNbrRow, IsisAdjRow, LdpRow } from "./junos/parse.js";
 
 const catalog = loadCatalog();
 const driver: NetworkDriver = env.driver === "containerlab" ? new ContainerlabDriver(catalog) : new MockDriver();
 console.log(`[backend] driver=${driver.name} kinds=${Object.keys(catalog).join(",")}`);
 
 const status = new Map<string, LabStatus>();
+/** Sistema operativo de un nodo (junos, ios, frr, linux) según su kind del catálogo. */
+const osOfTopo = (topo: Topology) => (node: string) => catalog[topo.nodes.find((n) => n.id === node)?.kind ?? ""]?.os ?? "linux";
 
 // ------------------------------------------------------------ eventos (WS)
 const eventClients = new Set<WebSocket>();
@@ -38,23 +41,24 @@ setInterval(async () => {
   }
 }, 4000);
 
-// Sondeo de protocolos: pregunta a los routers Junos por BGP/OSPF y emite los cambios
+// Sondeo de protocolos: pregunta a los routers Junos/IOS por BGP, OSPF, IS-IS y LDP y emite los cambios
 // como eventos ("BGP a-pe1 → 10.0.0.2: Active → Established"). PROTO_POLL_SEC=0 lo desactiva.
 const protoPoll = Number(process.env.PROTO_POLL_SEC ?? 5) * 1000;
 const lastProto = new Map<string, Map<string, string>>();
 async function pollProto(topo: Topology) {
   const bgp: ProtoBgp[] = [], ospf: ProtoOspf[] = [];
-  await Promise.all(topo.nodes.filter((n) => catalog[n.kind]?.os === "junos").map(async (n) => {
-    const get = async <T,>(v: "bgp" | "ospf") => {
-      try { return VIEWS[v].parse(safeJson(await driver.exec(topo, n.id, VIEWS[v].cmd))) as T[]; } catch { return [] as T[]; }
-    };
-    const [b, o] = await Promise.all([get<BgpPeerRow>("bgp"), get<OspfNbrRow>("ospf")]);
+  const osOf = osOfTopo(topo);
+  await Promise.all(topo.nodes.filter((n) => viewsFor(osOf(n.id))).map(async (n) => {
+    const get = async <T,>(v: ViewName) => { try { return await nodeView<T>(driver, topo, osOf, n.id, v); } catch { return [] as T[]; } };
+    const [b, o, i, l] = await Promise.all([get<BgpPeerRow>("bgp"), get<OspfNbrRow>("ospf"), get<IsisAdjRow>("isis"), get<LdpRow>("ldp")]);
     b.forEach((x) => bgp.push({ node: n.id, peer: x.peer, asn: x.asn, state: x.state }));
-    o.forEach((x) => ospf.push({ node: n.id, iface: x.iface, neighbor: x.address, state: x.state }));
+    o.forEach((x) => ospf.push({ node: n.id, iface: x.iface, neighbor: x.address, state: x.state, proto: "OSPF" }));
+    i.forEach((x) => ospf.push({ node: n.id, iface: x.iface, neighbor: x.system, state: x.state, proto: "IS-IS" }));
+    l.forEach((x) => ospf.push({ node: n.id, iface: "", neighbor: x.neighbor, state: x.state, proto: "LDP" }));
   }));
   const now = new Map<string, string>([
     ...bgp.map((x) => [`BGP ${x.node} → ${x.peer}`, x.state] as [string, string]),
-    ...ospf.map((x) => [`OSPF ${x.node} ${x.iface}`, x.state] as [string, string]),
+    ...ospf.map((x) => [`${x.proto} ${x.node} ${x.iface || "→"} ${x.proto === "OSPF" ? "" : x.neighbor}`.replace(/\s+/g, " ").trim(), x.state] as [string, string]),
   ]);
   const prev = lastProto.get(topo.name);
   if (prev) {
@@ -115,10 +119,11 @@ app.put("/api/topologies/:name", h((req) => {
 app.get("/api/templates", h(() => store.listTemplates()));
 app.post("/api/templates/:id/instantiate", h((req) => store.instantiateTemplate(req.params.id)));
 
+const osOfLab = (lab: string, node: string) => osOfTopo(store.loadTopology(lab))(node);
 app.get("/api/labs/:name/configs/:node", (req, res) => {
-  res.type("text/plain").send(store.readNodeConfig(req.params.name, req.params.node) ?? "");
+  res.type("text/plain").send(store.readNodeConfig(req.params.name, req.params.node, osOfLab(req.params.name, req.params.node)) ?? "");
 });
-app.put("/api/labs/:name/configs/:node", h((req) => store.writeNodeConfig(req.params.name, req.params.node, String(req.body))));
+app.put("/api/labs/:name/configs/:node", h((req) => store.writeNodeConfig(req.params.name, req.params.node, String(req.body), osOfLab(req.params.name, req.params.node))));
 
 app.get("/api/labs/:name/status", h((req) => ({ status: status.get(req.params.name) ?? "stopped" })));
 
@@ -151,30 +156,39 @@ app.post("/api/labs/:name/apply-configs", h(async (req) => {
   const log = logger(topo.name);
   const results: Record<string, string> = {};
   // en paralelo: cada nodo tiene su propia consola
+  const osOf = osOfTopo(topo);
   await Promise.all(wanted.map(async (node) => {
-    const text = store.readNodeConfig(topo.name, node);
+    const os = osOf(node);
+    if (os === "frr" || os === "linux") { results[node] = "se carga al desplegar"; return; }
+    const text = store.readNodeConfig(topo.name, node, os);
     if (!text) { results[node] = "sin config"; return; }
-    try { await pushSetConfig(driver, topo, node, text, log); results[node] = "ok"; }
-    catch (e) { results[node] = (e as Error).message; log((e as Error).message); }
+    try {
+      if (os === "ios") await pushIosConfig(driver, topo, node, text, log);
+      else await pushSetConfig(driver, topo, node, text, log);
+      results[node] = "ok";
+    } catch (e) { results[node] = (e as Error).message; log((e as Error).message); }
   }));
   return results;
 }));
 
 app.get("/api/labs/:name/nodes/:node/view/:view", h(async (req) => {
   const v = req.params.view as ViewName;
-  if (!(v in VIEWS)) throw new Error("vista desconocida");
+  if (!VIEW_NAMES.includes(v)) throw new Error("vista desconocida");
   const topo = store.loadTopology(req.params.name);
-  const raw = await driver.exec(topo, req.params.node, VIEWS[v].cmd);
-  return { rows: VIEWS[v].parse(safeJson(raw)) };
+  const vrf = typeof req.query.vrf === "string" && /^[\w-]{1,32}$/.test(req.query.vrf) ? req.query.vrf : undefined;
+  return { rows: await nodeView(driver, topo, osOfTopo(topo), req.params.node, v, { vrf }) };
 }));
 
 // Solo comandos de lectura desde el panel; para configurar está la consola.
-const SAFE_EXEC = /^(show|ping|traceroute)\s[\w\s.\-/:"*]+(\|\s*(match|except|count|no-more|display (json|xml|set|detail))[\w\s.\-/:"*]*)*$/;
+// Junos: | match/except/count/display …   IOS: | include/exclude/begin/section
+const SAFE_EXEC = /^(show|ping|traceroute)\s[\w\s.\-/:"*]+(\|\s*(match|except|count|no-more|display (json|xml|set|detail)|include|exclude|begin|section|i|e|b|s)\b[\w\s.\-/:"*]*)*$/;
 app.post("/api/labs/:name/nodes/:node/exec", h(async (req) => {
   const cmd = String(req.body?.cmd ?? "").trim();
-  if (!SAFE_EXEC.test(cmd)) throw new Error("solo se permiten show / ping / traceroute (con | match/except/count/display)");
-  const finalCmd = /^ping /.test(cmd) && !/count/.test(cmd) ? `${cmd} count 3` : cmd;
-  return { output: await driver.exec(store.loadTopology(req.params.name), req.params.node, finalCmd) };
+  if (!SAFE_EXEC.test(cmd)) throw new Error("solo se permiten show / ping / traceroute (con | match/include/…)");
+  const topo = store.loadTopology(req.params.name);
+  const ios = osOfTopo(topo)(req.params.node) === "ios";
+  const finalCmd = /^ping /.test(cmd) && !/(count|repeat)/.test(cmd) ? `${cmd} ${ios ? "repeat" : "count"} 3` : cmd;
+  return { output: await driver.exec(topo, req.params.node, finalCmd) };
 }));
 
 app.post("/api/labs/:name/links/:id", h(async (req) => {
@@ -183,9 +197,9 @@ app.post("/api/labs/:name/links/:id", h(async (req) => {
   emit({ type: "links", lab: topo.name, links: await driver.linkStates(topo) });
 }));
 
-app.post("/api/labs/:name/validate", h(async (req) => runChecks(driver, store.loadTopology(req.params.name))));
+app.post("/api/labs/:name/validate", h(async (req) => { const t = store.loadTopology(req.params.name); return runChecks(driver, t, osOfTopo(t)); }));
 // Comprobaciones arbitrarias (las usa la lección para saber si un paso está cumplido)
-app.post("/api/labs/:name/check", h(async (req) => runChecks(driver, store.loadTopology(req.params.name), (req.body?.checks ?? []) as Check[])));
+app.post("/api/labs/:name/check", h(async (req) => { const t = store.loadTopology(req.params.name); return runChecks(driver, t, osOfTopo(t), (req.body?.checks ?? []) as Check[]); }));
 
 // Frontend compilado (modo producción)
 if (existsSync(env.frontendDist)) {

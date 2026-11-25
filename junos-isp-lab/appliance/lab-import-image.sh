@@ -4,14 +4,23 @@
 #   sudo lab-import-image /ruta/vJunos-router-23.2R1.15.qcow2
 #   sudo lab-import-image /ruta/vjunosrouter-24.2R1-S2.5.tgz        (formato PNETLab/LabHub)
 #   sudo lab-import-image /opt/unetlab/addons/qemu/vjunosrouter-24.2R1-S2.5   (carpeta de PNETLab)
-# Opcional: forzar el tipo con  --kind crpd|vjunos-router|vmx|vsrx|cjunosevolved
+#   sudo lab-import-image /opt/unetlab/addons/iol/bin/i86bi-linux-l3-adventerprisek9-15.5.2T.bin
+#   sudo lab-import-image --version 17.12.01 x86_64_crb_linux-adventerprisek9-ms.iol
+# Opcional: --kind crpd|cisco-iol|vjunos-router|vmx|vsrx|cjunosevolved   --version X (si el nombre no la trae)
 set -euo pipefail
-APP=${APP:-/opt/junos-isp-lab}
+# La app es la carpeta padre de este script (vale para /opt/junos-isp-lab o un clon en tu $HOME)
+APP=${APP:-$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)}
 VRNETLAB=${VRNETLAB:-/opt/vrnetlab}
-LAB_USER=${LAB_USER:-lab}
+LAB_USER=${LAB_USER:-$(stat -c %U "$APP")}
 
-KIND=""
-if [ "${1:-}" = "--kind" ]; then KIND=$2; shift 2; fi
+KIND=""; FORCE_VER=""
+while [ $# -gt 1 ]; do
+  case "$1" in
+    --kind) KIND=$2; shift 2 ;;
+    --version) FORCE_VER=$2; shift 2 ;;
+    *) break ;;
+  esac
+done
 FILE=${1:?Uso: lab-import-image [--kind KIND] <fichero .qcow2|.tgz|.tar | carpeta de PNETLab>}
 [ -e "$FILE" ] || { echo "No existe: $FILE"; exit 1; }
 FILE=$(realpath "$FILE")
@@ -19,7 +28,7 @@ NAME=$(basename "$FILE" | tr 'A-Z' 'a-z')
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
 # Versión a partir del nombre: vjunosrouter-24.2R1-S2.5.tgz → 24.2R1-S2.5
-version_of() { basename "$1" | sed -E 's/\.(tgz|tar\.gz|tar|qcow2)$//' | grep -oE '[0-9]+\.[0-9]+[A-Za-z][0-9A-Za-z.-]*' | head -1; }
+version_of() { [ -n "$FORCE_VER" ] && { echo "$FORCE_VER"; return; }; basename "$1" | sed -E 's/\.(tgz|tar\.gz|tar|qcow2)$//' | grep -oE '[0-9]+\.[0-9]+[A-Za-z][0-9A-Za-z.-]*' | head -1 || true; }
 
 # ¿Formato PNETLab? (carpeta o .tgz con virtioa.qcow2 / hda.qcow2 dentro)
 PNET_DISK_RE='(^|/)(virtio[a-z]|hd[a-z]|sata[a-z])\.qcow2$'
@@ -40,6 +49,8 @@ fi
 if [ -z "$KIND" ]; then
   case "$NAME" in
     *crpd*)                                   KIND=crpd ;;
+    *linux-l2*|*l2-*.bin|*ioll2*)             echo "IOL L2 (switch) aún no está en el catálogo: importa el IOL L3"; exit 1 ;;
+    *.bin|*.iol|*linux-l3*|*iol*)             KIND=cisco-iol ;;
     *cjunos*|*junosevolved*|*junos-evo*)      KIND=cjunosevolved ;;
     *vjunos-router*|*vjunosrouter*)           KIND=vjunos-router ;;
     *vsrx*)                                   KIND=vsrx ;;
@@ -55,6 +66,20 @@ case "$KIND" in
   crpd|cjunosevolved)
     # Contenedores: basta con docker load
     TAG=$(docker load -i "$FILE" | sed -n 's/^Loaded image: //p' | tail -1)
+    ;;
+  cisco-iol)
+    # IOL: vrnetlab cisco/iol espera cisco_iol-<versión>.bin
+    DIR=cisco/iol
+    [ -d "$VRNETLAB/$DIR" ] || { echo "No encuentro $VRNETLAB/$DIR (¿vrnetlab actualizado?)"; ls "$VRNETLAB/cisco" || true; exit 1; }
+    VER=$(version_of "$FILE")
+    [ -n "$VER" ] || { echo "El nombre '$NAME' no trae versión: usa --version (ej. --version 17.12.01)"; exit 1; }
+    case "$NAME" in i86bi*) echo "AVISO: i86bi-* es IOL antiguo de 32 bits (15.x). Puede necesitar licencia iourc y no estar soportado por vrnetlab; lo recomendado es IOL 17.x (x86_64_crb_linux-*)." ;; esac
+    rm -f "$VRNETLAB/$DIR"/cisco_iol-*.bin
+    cp "$FILE" "$VRNETLAB/$DIR/cisco_iol-$VER.bin"
+    echo "==> $(basename "$FILE") → $DIR/cisco_iol-$VER.bin"
+    (cd "$VRNETLAB/$DIR" && make)
+    TAG=$(comm -13 <(echo "$before") <(docker images --format '{{.Repository}}:{{.Tag}}' | sort) | grep -v '<none>' | head -1 || true)
+    [ -n "$TAG" ] || TAG=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -i "cisco_iol" | head -1 || true)
     ;;
   vjunos-router|vmx|vsrx)
     # VMs qcow2: se empaquetan con vrnetlab (QEMU dentro de un contenedor)

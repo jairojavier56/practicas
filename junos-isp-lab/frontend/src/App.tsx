@@ -5,7 +5,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { api, connectEvents } from "./api";
-import { RouterNode, groupColor, type RouterNodeType } from "./components/RouterNode";
+import { RouterNode, groupColors, type RouterNodeType } from "./components/RouterNode";
 import { TerminalPane } from "./components/TerminalPane";
 import { Inspector } from "./components/Inspector";
 import { Lesson } from "./components/Lesson";
@@ -67,6 +67,7 @@ function Editor() {
   const openLab = async (name: string) => {
     const t = await api.topology(name);
     setTopo(t); setDirty(false); setSelected(null); setChecks(null); setLinkStates({}); setProto({ bgp: [], ospf: [] });
+    setTimeout(() => rf.fitView({ padding: 0.15, duration: 300 }), 150);
     setTerms([]); setActiveTerm(null);
     const s = await api.status(name);
     setStatus((x) => ({ ...x, [name]: s.status as LabStatus }));
@@ -89,15 +90,16 @@ function Editor() {
   // --- React Flow: nodos y aristas derivados de la topología
   // Estado propio de React Flow (conserva `measured`/`selected`); la topología es la fuente de verdad del resto.
   const [nodes, setNodes] = useState<RouterNodeType[]>([]);
+  const colorOf = useMemo(() => groupColors(topo.nodes.map((n) => n.group)), [topo.nodes]);
   useEffect(() => {
     setNodes((prev) => topo.nodes.map((n) => {
       const old = prev.find((p) => p.id === n.id);
       return {
         ...old, id: n.id, type: "router" as const, position: n.position,
-        data: { label: n.label ?? n.id, kind: n.kind, kindInfo: catalog[n.kind], asn: n.asn, group: n.group, running, onOpen: (id: string) => openTermRef.current(id) },
+        data: { label: n.label ?? n.id, kind: n.kind, kindInfo: catalog[n.kind], asn: n.asn, group: n.group, color: colorOf(n.group), running, onOpen: (id: string) => openTermRef.current(id) },
       };
     }));
-  }, [topo.nodes, catalog, running]);
+  }, [topo.nodes, catalog, running, colorOf]);
 
   const edges: Edge[] = useMemo(() => topo.links.map((l) => {
     const st = running ? (linkStates[l.id] ?? "unknown") : "unknown";
@@ -106,7 +108,7 @@ function Editor() {
       id: l.id, source: l.a.node, target: l.b.node, type: "straight",
       ...facingHandles(topo.nodes.find((n) => n.id === l.a.node)?.position, topo.nodes.find((n) => n.id === l.b.node)?.position),
       selected: selected?.type === "link" && selected.id === l.id,
-      label: `${l.a.iface} ⟷ ${l.b.iface}`,
+      label: `${shortIf(l.a.iface)} ⟷ ${shortIf(l.b.iface)}`,
       labelStyle: { fill: "var(--fg)", fontSize: 11, fontFamily: "ui-monospace, monospace" },
       labelBgStyle: { fill: "var(--panel)" },
       style: { stroke: color, strokeWidth: 2.5, strokeDasharray: st === "down" ? "6 4" : undefined },
@@ -228,7 +230,7 @@ function Editor() {
           </div>
         ))}
         <p className="muted hint">Arrastra al canvas. Une dos routers arrastrando desde sus bordes.</p>
-        {groups.length > 0 && <><h4>ISPs</h4>{groups.map((g) => <div key={g} className="legend"><i style={{ background: groupColor(g) }} />{g}</div>)}</>}
+        {groups.length > 0 && <><h4>ISPs</h4>{groups.map((g) => <div key={g} className="legend"><i style={{ background: colorOf(g) }} />{g}</div>)}</>}
       </aside>
 
       <main className="canvas" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
@@ -294,6 +296,11 @@ function Editor() {
       </section>
     </div>
   );
+}
+
+/** Nombres de interfaz cortos para las etiquetas: Ethernet0/1 → Et0/1, GigabitEthernet2 → Gi2 */
+function shortIf(i: string) {
+  return i.replace(/^GigabitEthernet/, "Gi").replace(/^TenGigabitEthernet/, "Te").replace(/^Ethernet/, "Et");
 }
 
 /** Elige el lado del nodo que mira hacia el otro extremo (aristas limpias sin edge custom). */

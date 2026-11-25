@@ -1,16 +1,15 @@
 import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import type { KindInfo } from "../types";
 
-export type RouterData = { label: string; kind: string; kindInfo?: KindInfo; asn?: number; group?: string; running: boolean; onOpen?: (id: string) => void };
+export type RouterData = { label: string; kind: string; kindInfo?: KindInfo; asn?: number; group?: string; running: boolean; color?: string; onOpen?: (id: string) => void };
 export type RouterNodeType = Node<RouterData, "router">;
 
-/** Color estable por grupo (ISP-A, ISP-B...). */
-export function groupColor(group?: string) {
-  if (!group) return "var(--muted)";
-  const palette = ["#2f6fed", "#e0702b", "#1f9d55", "#9b51e0", "#d64545", "#0a9396"];
-  let h = 0;
-  for (const c of group) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return palette[h % palette.length];
+const PALETTE = ["#2f6fed", "#e0702b", "#1f9d55", "#9b51e0", "#d64545", "#0a9396", "#b07800", "#5b6b7a"];
+
+/** Color por grupo según su orden de aparición en el lab: nunca repite entre los 8 primeros grupos. */
+export function groupColors(groups: (string | undefined)[]) {
+  const order = [...new Set(groups.filter(Boolean))] as string[];
+  return (g?: string) => (g ? PALETTE[order.indexOf(g) % PALETTE.length] : "var(--muted)");
 }
 
 function Icon({ kind }: { kind: KindInfo["icon"] | undefined }) {
@@ -28,7 +27,7 @@ function Icon({ kind }: { kind: KindInfo["icon"] | undefined }) {
 }
 
 export function RouterNode({ id, data, selected }: NodeProps<RouterNodeType>) {
-  const color = groupColor(data.group);
+  const color = data.color ?? "var(--muted)";
   return (
     <div className={`router-node ${selected ? "selected" : ""}`} style={{ borderColor: color, color }}
       onDoubleClick={(e) => { e.stopPropagation(); data.onOpen?.(id); }}>

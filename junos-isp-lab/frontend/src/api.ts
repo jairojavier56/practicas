@@ -29,7 +29,7 @@ export const api = {
   applyConfigs: (n: string, nodes?: string[]) => req<Record<string, string>>("POST", `${lab(n)}/apply-configs`, { nodes }),
   getConfig: (n: string, node: string) => req<string>("GET", `${lab(n)}/configs/${node}`, undefined, true),
   putConfig: (n: string, node: string, text: string) => req("PUT", `${lab(n)}/configs/${node}`, text),
-  view: <T,>(n: string, node: string, v: string) => req<{ rows: T[] }>("GET", `${lab(n)}/nodes/${node}/view/${v}`),
+  view: <T,>(n: string, node: string, v: string, vrf?: string) => req<{ rows: T[] }>("GET", `${lab(n)}/nodes/${node}/view/${v}${vrf ? `?vrf=${encodeURIComponent(vrf)}` : ""}`),
   exec: (n: string, node: string, cmd: string) => req<{ output: string }>("POST", `${lab(n)}/nodes/${node}/exec`, { cmd }),
   setLink: (n: string, id: string, up: boolean) => req("POST", `${lab(n)}/links/${id}`, { up }),
   validate: (n: string) => req<CheckResult[]>("POST", `${lab(n)}/validate`),
